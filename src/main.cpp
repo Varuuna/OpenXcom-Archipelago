@@ -17,6 +17,7 @@
  * along with OpenXcom.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <sstream>
+#include <iostream>
 #include "version.h"
 #include "Engine/Logger.h"
 #include "Engine/CrossPlatform.h"
@@ -90,6 +91,32 @@ int main(int argc, char *argv[])
 #ifdef _MSC_VER
 	// Uncomment to check memory leaks in VS
 	//_CrtSetDbgFlag ( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
+
+	// Allocate console for debug output (comment out if not needed)
+	#ifndef NDEBUG
+	AllocConsole();
+	
+	// Add error checking for console redirection to prevent access violations
+	FILE* pCout = nullptr;
+	FILE* pCerr = nullptr;
+	FILE* pCin = nullptr;
+	
+	if (freopen_s(&pCout, "CONOUT$", "w", stdout) != 0) {
+		// Handle error silently - console redirection failed
+	}
+	if (freopen_s(&pCerr, "CONOUT$", "w", stderr) != 0) {
+		// Handle error silently - console redirection failed
+	}
+	if (freopen_s(&pCin, "CONIN$", "r", stdin) != 0) {
+		// Handle error silently - console redirection failed
+	}
+	
+	SetConsoleTitleA("OpenXcom Debug Console");
+	
+	// Flush streams to ensure console is ready
+	if (pCout) fflush(stdout);
+	if (pCerr) fflush(stderr);
+	#endif
 
 	SetUnhandledExceptionFilter(crashLogger);
 	// Uncomment to debug crash handler

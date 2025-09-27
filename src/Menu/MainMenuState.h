@@ -40,7 +40,7 @@ public:
 class MainMenuState : public State
 {
 private:
-	TextButton *_btnNewGame, *_btnNewBattle, *_btnLoad, *_btnOptions, *_btnMods, *_btnQuit;
+	TextButton *_btnConnectAP, *_btnNewBattle, *_btnLoad, *_btnOptions, *_btnMods, *_btnQuit;
 	Window *_window;
 	Text *_txtTitle;
 public:
@@ -48,8 +48,8 @@ public:
 	MainMenuState();
 	/// Cleans up the Main Menu state.
 	~MainMenuState();
-	/// Handler for clicking the New Game button.
-	void btnNewGameClick(Action *action);
+	/// Handler for clicking the Connect to AP button.
+	void btnConnectAPClick(Action *action);
 	/// Handler for clicking the New Battle button.
 	void btnNewBattleClick(Action *action);
 	/// Handler for clicking the Load Saved Game button.

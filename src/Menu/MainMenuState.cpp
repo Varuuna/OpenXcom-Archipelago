@@ -26,7 +26,7 @@
 #include "../Interface/TextButton.h"
 #include "../Interface/Window.h"
 #include "../Interface/Text.h"
-#include "NewGameState.h"
+#include "ArchipelagoConnectState.h"
 #include "NewBattleState.h"
 #include "ListLoadState.h"
 #include "OptionsVideoState.h"
@@ -51,7 +51,7 @@ MainMenuState::MainMenuState()
 {
 	// Create objects
 	_window = new Window(this, 256, 160, 32, 20, POPUP_BOTH);
-	_btnNewGame = new TextButton(92, 20, 64, 90);
+	_btnConnectAP = new TextButton(92, 20, 64, 90);
 	_btnNewBattle = new TextButton(92, 20, 164, 90);
 	_btnLoad = new TextButton(92, 20, 64, 118);
 	_btnOptions = new TextButton(92, 20, 164, 118);
@@ -63,7 +63,7 @@ MainMenuState::MainMenuState()
 	setInterface("mainMenu");
 
 	add(_window, "window", "mainMenu");
-	add(_btnNewGame, "button", "mainMenu");
+	add(_btnConnectAP, "button", "mainMenu");
 	add(_btnNewBattle, "button", "mainMenu");
 	add(_btnLoad, "button", "mainMenu");
 	add(_btnOptions, "button", "mainMenu");
@@ -76,8 +76,8 @@ MainMenuState::MainMenuState()
 	// Set up objects
 	_window->setBackground(_game->getMod()->getSurface("BACK01.SCR"));
 
-	_btnNewGame->setText(tr("STR_NEW_GAME"));
-	_btnNewGame->onMouseClick((ActionHandler)&MainMenuState::btnNewGameClick);
+	_btnConnectAP->setText(tr("STR_CONNECT_TO_AP"));
+	_btnConnectAP->onMouseClick((ActionHandler)&MainMenuState::btnConnectAPClick);
 
 	_btnNewBattle->setText(tr("STR_NEW_BATTLE"));
 	_btnNewBattle->onMouseClick((ActionHandler)&MainMenuState::btnNewBattleClick);
@@ -111,12 +111,12 @@ MainMenuState::~MainMenuState()
 }
 
 /**
- * Opens the New Game window.
+ * Opens the Archipelago Connect window.
  * @param action Pointer to an action.
  */
-void MainMenuState::btnNewGameClick(Action *)
+void MainMenuState::btnConnectAPClick(Action *)
 {
-	_game->pushState(new NewGameState);
+	_game->pushState(new ArchipelagoConnectState);
 }
 
 /**
