@@ -346,8 +346,6 @@ set ( ufopedia_src
 
 set ( archipelago_src
   Archipelago/ArchipelagoTypes.h
-  Archipelago/ArchipelagoClient.cpp
-  Archipelago/ArchipelagoProtocol.cpp
   Archipelago/ResearchLocationMapper.cpp
   Archipelago/ArchipelagoManager.cpp
 )
@@ -502,7 +500,17 @@ if (${CMAKE_SYSTEM_NAME} MATCHES FreeBSD OR ${CMAKE_SYSTEM_NAME} MATCHES NetBSD 
   set ( system_libs -lexecinfo )
 endif ()
 
+# Add APCpp include directory
+include_directories ( APCpp )
+
 target_link_libraries ( openxcom ${system_libs} ${SDLIMAGE_LIBRARY} ${SDLMIXER_LIBRARY} ${SDLGFX_LIBRARY} ${SDL_LIBRARY} ${OPENGL_LIBRARIES} debug ${YAMLCPP_LIBRARY_DEBUG} optimized ${YAMLCPP_LIBRARY} )
+
+# Link APCpp library
+if ( WIN32 )
+  target_link_libraries ( openxcom ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.lib )
+else ()
+  target_link_libraries ( openxcom ${CMAKE_SOURCE_DIR}/src/APCpp/libAPCpp.so )
+endif ()
 
 # Pack libraries into bundle and link executable appropriately
 if ( APPLE AND CREATE_BUNDLE )
@@ -540,6 +548,15 @@ if ( WIN32 )
 	  VERBATIM )
     install ( FILES ${dll} DESTINATION bin)
   endforeach()
+endif ()
+
+# Copy APCpp DLL to bin folder on Windows
+if ( WIN32 )
+  add_custom_command ( TARGET openxcom
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.dll ${EXECUTABLE_OUTPUT_PATH}
+    VERBATIM )
+  install ( FILES ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.dll DESTINATION bin)
 endif ()
 
 #Setup source groups for IDE
