@@ -26,11 +26,11 @@
 #include "../Interface/TextButton.h"
 #include "../Interface/Window.h"
 #include "../Interface/Text.h"
-#include "ArchipelagoConnectState.h"
 #include "NewBattleState.h"
 #include "ListLoadState.h"
 #include "OptionsVideoState.h"
 #include "ModListState.h"
+#include "ArchipelagoConnectState.h"
 #include "../Engine/Options.h"
 
 namespace OpenXcom

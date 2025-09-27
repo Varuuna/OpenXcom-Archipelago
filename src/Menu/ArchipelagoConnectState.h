@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with OpenXcom.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "../Engine/State.h"
 #include "../Archipelago/ArchipelagoTypes.h"
 
@@ -29,36 +30,51 @@ class Text;
 class TextEdit;
 
 /**
- * Archipelago Connection window for connecting to
- * an Archipelago multiworld server.
+ * Archipelago Connection window that allows the player
+ * to connect to an Archipelago server before starting a new game.
  */
 class ArchipelagoConnectState : public State
 {
 private:
-	TextButton *_btnConnect, *_btnCancel;
-	Window *_window;
-	Text *_txtTitle, *_txtServerUrl, *_txtServerPort, *_txtSlotName, *_txtPassword;
-	TextEdit *_edtServerUrl, *_edtServerPort, *_edtSlotName, *_edtPassword;
-	Text *_txtStatus;
-	
-	bool _connecting;
-	ArchipelagoConnectionState _lastConnectionState;
-	int _connectionTimeout;
-	static const int CONNECTION_TIMEOUT_FRAMES = 600; // 10 seconds at 60 FPS (reasonable timeout)
-
+    TextButton *_btnConnect, *_btnCancel;
+    Window *_window;
+    Text *_txtTitle, *_txtServerUrl, *_txtSlotName, *_txtPassword, *_txtStatus;
+    TextEdit *_edtServerUrl, *_edtSlotName, *_edtPassword;
+    
+    APConnectionInfo _connectionInfo;
+    bool _connecting;
+    
 public:
-	/// Creates the Archipelago Connect state.
-	ArchipelagoConnectState();
-	/// Cleans up the Archipelago Connect state.
-	~ArchipelagoConnectState();
-	/// Handler for clicking the Connect button.
-	void btnConnectClick(Action *action);
-	/// Handler for clicking the Cancel button.
-	void btnCancelClick(Action *action);
-	/// Updates the connection status.
-	void updateStatus(const std::string &status);
-	/// Runs state functionality every cycle.
-	void think() override;
+    /// Creates the Archipelago Connect state.
+    ArchipelagoConnectState();
+    /// Cleans up the Archipelago Connect state.
+    ~ArchipelagoConnectState();
+    /// Handler for clicking the Connect button.
+    void btnConnectClick(Action *action);
+    /// Handler for clicking the Cancel button.
+    void btnCancelClick(Action *action);
+    /// Handler for changing the server URL.
+    void edtServerUrlChange(Action *action);
+    /// Handler for changing the slot name.
+    void edtSlotNameChange(Action *action);
+    /// Handler for changing the password.
+    void edtPasswordChange(Action *action);
+    /// Update the connection status.
+    void think();
+    /// Initialize the state.
+    void init();
+    
+private:
+    /// Validate input fields.
+    bool validateInput();
+    /// Update status text.
+    void updateStatus(const std::string& message);
+    /// Handle successful connection.
+    void onConnectionSuccess();
+    /// Handle connection failure.
+    void onConnectionFailure(const std::string& error);
+    /// Start the connection process.
+    void startConnection();
 };
 
 }

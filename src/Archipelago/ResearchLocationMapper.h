@@ -19,91 +19,68 @@
  */
 
 #include "ArchipelagoTypes.h"
-#include <string>
-#include <vector>
 #include <map>
+#include <string>
 
 namespace OpenXcom
 {
 
-class Mod;
+class RuleResearch;
 
 /**
- * Maps OpenXcom research projects to Archipelago locations and items.
- * This class handles the bidirectional mapping between OpenXcom research names
- * and Archipelago location/item IDs for synchronization.
+ * Maps OpenXcom research topics to Archipelago location IDs
+ * Handles research completion events and manages location checking logic
  */
 class ResearchLocationMapper
 {
 private:
-	// Base location ID offset for OpenXcom research
-	static const int64_t BASE_LOCATION_ID = 1000000;
-	static const int64_t BASE_ITEM_ID = 1000000;
-	
-	// Mapping tables
-	std::map<std::string, int64_t> _researchToLocation;
-	std::map<int64_t, std::string> _locationToResearch;
-	std::map<std::string, int64_t> _researchToItem;
-	std::map<int64_t, std::string> _itemToResearch;
-	
-	// Display names for locations/items
-	std::map<int64_t, std::string> _locationDisplayNames;
-	std::map<int64_t, std::string> _itemDisplayNames;
-	
-	// Configuration
-	bool _initialized;
-	
-	// Helper methods
-	void initializeDefaultMappings();
-	void loadCustomMappings();
-	void saveCustomMappings();
-	std::string sanitizeResearchName(const std::string& name);
-	
+    std::map<std::string, APResearchLocation> _researchToLocation;
+    std::map<int64_t, std::string> _locationToResearch;
+    std::map<int64_t, APResearchItem> _itemIdToResearch;
+    
 public:
-	/// Creates a new research location mapper
-	ResearchLocationMapper();
-	/// Destructor
-	~ResearchLocationMapper();
-	
-	/// Initializes the mapper with mod data
-	void initialize(const Mod* mod);
-	/// Checks if the mapper is initialized
-	bool isInitialized() const;
-	
-	/// Gets the location ID for a research project
-	int64_t getLocationId(const std::string& researchName);
-	/// Gets the research name for a location ID
-	std::string getResearchName(int64_t locationId);
-	
-	/// Gets the item ID for a research project
-	int64_t getItemId(const std::string& researchName);
-	/// Gets the research name for an item ID
-	std::string getResearchFromItem(int64_t itemId);
-	
-	/// Gets the display name for a location
-	std::string getLocationDisplayName(int64_t locationId);
-	/// Gets the display name for an item
-	std::string getItemDisplayName(int64_t itemId);
-	
-	/// Gets all mapped research projects
-	std::vector<std::string> getAllMappedResearch();
-	/// Gets all location IDs
-	std::vector<int64_t> getAllLocationIds();
-	
-	/// Adds a custom mapping
-	void addCustomMapping(const std::string& researchName, int64_t locationId, int64_t itemId, const std::string& displayName = "");
-	/// Removes a custom mapping
-	void removeCustomMapping(const std::string& researchName);
-	
-	/// Checks if a research project is mapped
-	bool isMapped(const std::string& researchName);
-	/// Gets the number of mapped research projects
-	size_t getMappingCount() const;
-	
-	/// Exports mappings to a file
-	bool exportMappings(const std::string& filename);
-	/// Imports mappings from a file
-	bool importMappings(const std::string& filename);
+    /// Creates the research location mapper
+    ResearchLocationMapper();
+    
+    /// Initialize the mappings based on AP world configuration
+    void initialize();
+    
+    /// Get location ID for a research topic
+    int64_t getLocationId(const std::string& researchName) const;
+    
+    /// Get research name for a location ID
+    std::string getResearchName(int64_t locationId) const;
+    
+    /// Get research name for an item ID
+    std::string getResearchFromItemId(int64_t itemId) const;
+    
+    /// Check if a research topic is mapped to AP
+    bool isResearchMapped(const std::string& researchName) const;
+    
+    /// Check if a location ID is valid
+    bool isLocationValid(int64_t locationId) const;
+    
+    /// Check if an item ID is valid
+    bool isItemValid(int64_t itemId) const;
+    
+    /// Get all mapped research locations
+    const std::map<std::string, APResearchLocation>& getAllLocations() const;
+    
+    /// Get all mapped research items
+    const std::map<int64_t, APResearchItem>& getAllItems() const;
+    
+    /// Create location object for research
+    APResearchLocation createLocation(const std::string& researchName) const;
+    
+    /// Create item object for research
+    APResearchItem createItem(int64_t itemId) const;
+    
+private:
+    /// Add a research mapping
+    void addResearchMapping(const std::string& researchName, int64_t locationId, int64_t itemId);
+    
+    /// Initialize default mappings from AP world configuration
+    void initializeDefaultMappings();
 };
 
 }

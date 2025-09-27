@@ -345,9 +345,9 @@ set ( ufopedia_src
 )
 
 set ( archipelago_src
-  Archipelago/ArchipelagoTypes.h
-  Archipelago/ResearchLocationMapper.cpp
+  Archipelago/ArchipelagoClient.cpp
   Archipelago/ArchipelagoManager.cpp
+  Archipelago/ResearchLocationMapper.cpp
 )
 
 # NOTE: to build with clang *and* libc++ on Linux, you need to call cmake like so:
@@ -561,7 +561,6 @@ endif ()
 
 #Setup source groups for IDE
 if ( MSVC OR "${CMAKE_GENERATOR}" STREQUAL "Xcode" )
-  source_group ( "Archipelago" FILES ${archipelago_src} )
   source_group ( "Basescape" FILES ${basescape_src} )
   source_group ( "Battlescape" FILES ${battlescape_src} )
   source_group ( "Engine" FILES ${engine_src} )
@@ -571,6 +570,7 @@ if ( MSVC OR "${CMAKE_GENERATOR}" STREQUAL "Xcode" )
   source_group ( "Mod" FILES ${mod_src} )
   source_group ( "Savegame" FILES ${savegame_src} )
   source_group ( "Ufopedia" FILES ${ufopedia_src} )
+  source_group ( "Archipelago" FILES ${archipelago_src} )
   if ( APPLE )
     source_group ( "SDL" FILES ${sdl_src} )
   endif ()

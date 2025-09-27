@@ -19,164 +19,88 @@
  */
 
 #include <string>
-#include <vector>
-#include <map>
-#include <functional>
-#include <stdint.h>
+#include <cstdint>
+#include "../APCpp/Archipelago.h"
 
 namespace OpenXcom
 {
 
+// Use the APCpp connection status directly
+using APConnectionStatus = AP_ConnectionStatus;
+// Available states: Disconnected, Connected, Authenticated, ConnectionRefused
+
 /**
- * Archipelago connection states
+ * Structure containing connection information for Archipelago server
  */
-enum ArchipelagoConnectionState
-{
-	AP_DISCONNECTED = 0,
-	AP_CONNECTING,
-	AP_CONNECTED,
-	AP_AUTHENTICATED,
-	AP_ERROR
+struct APConnectionInfo {
+    std::string serverUrl;
+    std::string slotName;
+    std::string password;
+    int playerId;
+    
+    APConnectionInfo() : playerId(-1) {}
 };
 
 /**
- * Archipelago message types based on the protocol specification
+ * Structure representing a research item received from Archipelago
  */
-enum ArchipelagoMessageType
-{
-	AP_MSG_ROOM_INFO = 0,
-	AP_MSG_CONNECTION_REFUSED,
-	AP_MSG_CONNECTED,
-	AP_MSG_RECEIVED_ITEMS,
-	AP_MSG_LOCATION_INFO,
-	AP_MSG_ROOM_UPDATE,
-	AP_MSG_PRINT,
-	AP_MSG_PRINT_JSON,
-	AP_MSG_DATA_PACKAGE,
-	AP_MSG_BOUNCED,
-	AP_MSG_INVALID_PACKET,
-	AP_MSG_RETRIEVE,
-	AP_MSG_RETRIEVED,
-	AP_MSG_SET_NOTIFY,
-	AP_MSG_SET_REPLY,
-	AP_MSG_CONNECT = 20,
-	AP_MSG_CONNECT_UPDATE,
-	AP_MSG_LOCATION_CHECKS,
-	AP_MSG_LOCATION_SCOUTS,
-	AP_MSG_STATUS_UPDATE,
-	AP_MSG_SAY,
-	AP_MSG_GET_DATA_PACKAGE,
-	AP_MSG_BOUNCE,
-	AP_MSG_GET,
-	AP_MSG_SET
+struct APResearchItem {
+    int64_t itemId;
+    std::string itemName;
+    bool received;
+    
+    APResearchItem() : itemId(0), received(false) {}
+    APResearchItem(int64_t id, const std::string& name) 
+        : itemId(id), itemName(name), received(false) {}
 };
 
 /**
- * Archipelago item flags
+ * Structure representing a research location that can be checked in Archipelago
  */
-enum ArchipelagoItemFlags
-{
-	AP_ITEM_ADVANCEMENT = 1,
-	AP_ITEM_NEVER_EXCLUDE = 2,
-	AP_ITEM_PROGRESSION = 4,
-	AP_ITEM_USEFUL = 8,
-	AP_ITEM_TRAP = 16,
-	AP_ITEM_FILLER = 32
+struct APResearchLocation {
+    int64_t locationId;
+    std::string locationName;
+    std::string researchName;
+    bool checked;
+    
+    APResearchLocation() : locationId(0), checked(false) {}
+    APResearchLocation(int64_t id, const std::string& locName, const std::string& resName)
+        : locationId(id), locationName(locName), researchName(resName), checked(false) {}
 };
 
 /**
- * Archipelago location flags
+ * Enum for Archipelago connection errors
  */
-enum ArchipelagoLocationFlags
-{
-	AP_LOCATION_NONE = 0,
-	AP_LOCATION_PROGRESSION = 1,
-	AP_LOCATION_USEFUL = 2,
-	AP_LOCATION_FILLER = 4,
-	AP_LOCATION_TRAP = 8
+enum APConnectionError {
+    AP_ERROR_NONE = 0,
+    AP_ERROR_NO_SERVER,
+    AP_ERROR_NO_SLOT,
+    AP_ERROR_INVALID_PORT,
+    AP_ERROR_CONNECTION_FAILED,
+    AP_ERROR_AUTHENTICATION_FAILED,
+    AP_ERROR_CONNECTION_REFUSED,
+    AP_ERROR_NETWORK_ERROR
 };
 
 /**
- * Structure representing an Archipelago item
+ * Structure for Archipelago world configuration
+ * Based on OpenXcomAPWorld items and locations
  */
-struct ArchipelagoItem
-{
-	int64_t item;
-	int location;
-	int player;
-	int flags;
-	
-	ArchipelagoItem() : item(0), location(0), player(0), flags(0) {}
-	ArchipelagoItem(int64_t i, int l, int p, int f) : item(i), location(l), player(p), flags(f) {}
+struct APWorldConfig {
+    // Item IDs from OpenXcomAPWorld
+    static const int64_t ITEM_LASER_WEAPONS = 1;
+    static const int64_t ITEM_MEDI_KIT = 2;
+    static const int64_t ITEM_MOTION_SCANNER = 3;
+    
+    // Location IDs from OpenXcomAPWorld
+    static const int64_t LOCATION_LASER_WEAPONS = 1;
+    static const int64_t LOCATION_MEDI_KIT = 2;
+    static const int64_t LOCATION_MOTION_SCANNER = 3;
+    
+    // Research name mappings
+    static const char* RESEARCH_LASER_WEAPONS;
+    static const char* RESEARCH_MEDI_KIT;
+    static const char* RESEARCH_MOTION_SCANNER;
 };
-
-/**
- * Structure representing an Archipelago location check
- */
-struct ArchipelagoLocationCheck
-{
-	int64_t location;
-	
-	ArchipelagoLocationCheck() : location(0) {}
-	ArchipelagoLocationCheck(int64_t l) : location(l) {}
-};
-
-/**
- * Structure for Archipelago connection configuration
- */
-struct ArchipelagoConfig
-{
-	std::string hostname;
-	int port;
-	std::string slot_name;
-	std::string password;
-	std::string game;
-	std::vector<std::string> tags;
-	int version_major;
-	int version_minor;
-	int version_build;
-	bool items_handling;
-	
-	// WebSocket compression settings
-	bool enable_compression;
-	int max_window_bits;
-	bool no_context_takeover;
-	
-	ArchipelagoConfig() :
-		hostname("archipelago.gg"),
-		port(38281),
-		game("OpenXcom"),
-		version_major(0),
-		version_minor(6),
-		version_build(4),
-		items_handling(true),
-		enable_compression(true),
-		max_window_bits(15),
-		no_context_takeover(true)  // Safer default for compatibility
-	{
-		tags.push_back("AP");
-	}
-};
-
-/**
- * Structure for research to location mapping
- */
-struct ResearchLocationMapping
-{
-	std::string research_name;
-	int64_t location_id;
-	std::string display_name;
-	
-	ResearchLocationMapping() : location_id(0) {}
-	ResearchLocationMapping(const std::string& name, int64_t id, const std::string& display) :
-		research_name(name), location_id(id), display_name(display) {}
-};
-
-/**
- * Callback function types for Archipelago events
- */
-typedef std::function<void(ArchipelagoConnectionState)> ArchipelagoConnectionCallback;
-typedef std::function<void(const ArchipelagoItem&)> ArchipelagoItemReceivedCallback;
-typedef std::function<void(const std::string&)> ArchipelagoMessageCallback;
 
 }

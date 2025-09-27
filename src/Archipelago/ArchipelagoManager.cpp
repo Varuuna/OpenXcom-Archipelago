@@ -18,13 +18,8 @@
  */
 
 #include "ArchipelagoManager.h"
-#include "ResearchLocationMapper.h"
 #include "../Engine/Game.h"
-#include "../Engine/Logger.h"
-#include "../Mod/Mod.h"
-#include "../Mod/RuleResearch.h"
 #include "../Savegame/SavedGame.h"
-#include <sstream>
 
 namespace OpenXcom
 {
@@ -33,504 +28,334 @@ namespace OpenXcom
 ArchipelagoManager* ArchipelagoManager::_instance = nullptr;
 
 /**
- * Private constructor for singleton.
+ * Private constructor for singleton
  */
-ArchipelagoManager::ArchipelagoManager() :
-	_game(nullptr),
-	_enabled(false),
-	_initialized(false),
-	_connecting(false)
+ArchipelagoManager::ArchipelagoManager() : _game(nullptr), _connected(false), _gameStarted(false)
 {
-	Log(LOG_INFO) << "ArchipelagoManager: Created (using APCpp)";
+    _client = std::make_unique<ArchipelagoClient>();
 }
 
 /**
- * Destructor.
+ * Private destructor
  */
 ArchipelagoManager::~ArchipelagoManager()
 {
-	shutdown();
-	Log(LOG_INFO) << "ArchipelagoManager: Destroyed";
+    shutdown();
 }
 
 /**
- * Gets the singleton instance.
- * @return Singleton instance
+ * Get the singleton instance
+ * @return singleton instance
  */
 ArchipelagoManager* ArchipelagoManager::getInstance()
 {
-	if (!_instance)
-	{
-		_instance = new ArchipelagoManager();
-	}
-	return _instance;
+    if (!_instance)
+    {
+        _instance = new ArchipelagoManager();
+    }
+    return _instance;
 }
 
 /**
- * Destroys the singleton instance.
- */
-void ArchipelagoManager::destroy()
-{
-	if (_instance)
-	{
-		delete _instance;
-		_instance = nullptr;
-	}
-}
-
-/**
- * Initializes the manager with game reference.
+ * Initialize the manager with game reference
  * @param game Game instance
  */
 void ArchipelagoManager::initialize(Game* game)
 {
-	if (_initialized)
-		return;
-	
-	_game = game;
-	
-	// Create research location mapper
-	_mapper = std::make_unique<ResearchLocationMapper>();
-	
-	// Initialize mapper with mod data
-	if (_game && _game->getMod())
-	{
-		_mapper->initialize(_game->getMod());
-	}
-	
-	// Set up APCpp callbacks using std::function
-	AP_SetItemClearCallback(std::function<void()>(onItemClear));
-	AP_SetItemRecvCallback(std::function<void(int64_t, bool)>(onItemReceived));
-	AP_SetLocationCheckedCallback(std::function<void(int64_t)>(onLocationChecked));
-	
-	// Set client version
-	AP_NetworkVersion version = {_config.version_major, _config.version_minor, _config.version_build};
-	AP_SetClientVersion(&version);
-	
-	_initialized = true;
-	Log(LOG_INFO) << "ArchipelagoManager: Initialized with APCpp";
+    _game = game;
+    initializeResearchMappings();
+    
+    // Set up callbacks
+    _client->setItemClearCallback([this]() { onItemsClear(); });
+    _client->setItemRecvCallback([this](int64_t itemId, bool notify) { onItemReceived(itemId, notify); });
+    _client->setLocationCheckedCallback([this](int64_t locationId) { onLocationChecked(locationId); });
 }
 
 /**
- * Shuts down the manager.
+ * Cleanup and shutdown
  */
 void ArchipelagoManager::shutdown()
 {
-	if (!_initialized)
-		return;
-	
-	disconnect();
-	
-	// Shutdown APCpp if it was initialized
-	if (AP_IsInit())
-	{
-		AP_Shutdown();
-	}
-	
-	_mapper.reset();
-	_game = nullptr;
-	_initialized = false;
-	
-	Log(LOG_INFO) << "ArchipelagoManager: Shut down";
+    if (_client)
+    {
+        _client->shutdown();
+    }
+    _connected = false;
+    _gameStarted = false;
 }
 
 /**
- * Checks if Archipelago is enabled.
- * @return True if enabled
+ * Connect to Archipelago server
+ * @param connectionInfo Connection information
+ * @return true if connection successful
  */
-bool ArchipelagoManager::isEnabled() const
+bool ArchipelagoManager::connect(const APConnectionInfo& connectionInfo)
 {
-	return _enabled;
+    if (!_client->initialize(connectionInfo))
+    {
+        return false;
+    }
+    
+    _connected = _client->connect();
+    return _connected;
 }
 
 /**
- * Enables or disables Archipelago.
- * @param enabled Enable state
- */
-void ArchipelagoManager::setEnabled(bool enabled)
-{
-	if (_enabled == enabled)
-		return;
-	
-	_enabled = enabled;
-	
-	if (!_enabled && isConnected())
-	{
-		disconnect();
-	}
-	
-	Log(LOG_INFO) << "ArchipelagoManager: " << (enabled ? "Enabled" : "Disabled");
-}
-
-/**
- * Checks if connected to Archipelago server.
- * @return True if connected
- */
-bool ArchipelagoManager::isConnected() const
-{
-	if (!_enabled || !_initialized)
-		return false;
-	
-	AP_ConnectionStatus status = AP_GetConnectionStatus();
-	return status == AP_ConnectionStatus::Connected || status == AP_ConnectionStatus::Authenticated;
-}
-
-/**
- * Checks if authenticated with Archipelago server.
- * @return True if authenticated
- */
-bool ArchipelagoManager::isAuthenticated() const
-{
-	if (!_enabled || !_initialized)
-		return false;
-	
-	return AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated;
-}
-
-/**
- * Gets the current connection state.
- * @return Connection state
- */
-ArchipelagoConnectionState ArchipelagoManager::getConnectionState() const
-{
-	if (!_enabled || !_initialized)
-		return AP_DISCONNECTED;
-	
-	// If we're in the process of connecting but APCpp hasn't established connection yet,
-	// we need to simulate the CONNECTING state since APCpp doesn't have one
-	if (_connecting && !AP_IsInit())
-		return AP_CONNECTING;
-	
-	if (!AP_IsInit())
-		return AP_DISCONNECTED;
-	
-	AP_ConnectionStatus status = AP_GetConnectionStatus();
-	switch (status)
-	{
-		case AP_ConnectionStatus::Disconnected:
-			// If we initiated a connection but APCpp shows disconnected, we might be connecting
-			return _connecting ? AP_CONNECTING : AP_DISCONNECTED;
-		case AP_ConnectionStatus::Connected:
-			return AP_CONNECTED;
-		case AP_ConnectionStatus::Authenticated:
-			return AP_AUTHENTICATED;
-		case AP_ConnectionStatus::ConnectionRefused:
-			return AP_ERROR;
-		default:
-			return AP_DISCONNECTED;
-	}
-}
-
-/**
- * Sets the configuration.
- * @param config Archipelago configuration
- */
-void ArchipelagoManager::setConfig(const ArchipelagoConfig& config)
-{
-	_config = config;
-	Log(LOG_INFO) << "ArchipelagoManager: Configuration updated";
-}
-
-/**
- * Gets the current configuration.
- * @return Current configuration
- */
-const ArchipelagoConfig& ArchipelagoManager::getConfig() const
-{
-	return _config;
-}
-
-/**
- * Connects to the Archipelago server.
- * @return True if connection initiated successfully
- */
-bool ArchipelagoManager::connect()
-{
-	if (!_enabled || !_initialized)
-	{
-		Log(LOG_WARNING) << "ArchipelagoManager: Cannot connect - not enabled or initialized";
-		return false;
-	}
-	
-	if (isConnected())
-	{
-		Log(LOG_WARNING) << "ArchipelagoManager: Already connected";
-		return true;
-	}
-	
-	// Build server address string
-	std::string serverAddress = _config.hostname + ":" + std::to_string(_config.port);
-	
-	Log(LOG_INFO) << "ArchipelagoManager: Connecting to " << serverAddress;
-	
-	try
-	{
-		// Set connecting state before initiating connection
-		_connecting = true;
-		
-		// Initialize APCpp with connection parameters
-		AP_Init(serverAddress.c_str(), _config.game.c_str(), _config.slot_name.c_str(), _config.password.c_str());
-		
-		// Start the connection
-		AP_Start();
-		
-		Log(LOG_INFO) << "ArchipelagoManager: APCpp connection initiated";
-		return true;
-	}
-	catch (const std::exception& e)
-	{
-		_connecting = false;
-		Log(LOG_ERROR) << "ArchipelagoManager: Failed to connect: " << e.what();
-		return false;
-	}
-	catch (...)
-	{
-		_connecting = false;
-		Log(LOG_ERROR) << "ArchipelagoManager: Failed to connect: Unknown error";
-		return false;
-	}
-}
-
-/**
- * Disconnects from the server.
+ * Disconnect from server
  */
 void ArchipelagoManager::disconnect()
 {
-	_connecting = false;
-	
-	if (AP_IsInit())
-	{
-		AP_Shutdown();
-	}
-	
-	Log(LOG_INFO) << "ArchipelagoManager: Disconnected";
+    if (_client)
+    {
+        _client->disconnect();
+    }
+    _connected = false;
 }
 
 /**
- * Updates the manager (call regularly from main game loop).
+ * Check if connected to Archipelago
+ * @return true if connected
  */
-void ArchipelagoManager::update()
+bool ArchipelagoManager::isConnected() const
 {
-	if (!_enabled || !_initialized)
-		return;
-	
-	// Check if we were connecting and now have a definitive state
-	if (_connecting && AP_IsInit())
-	{
-		AP_ConnectionStatus status = AP_GetConnectionStatus();
-		if (status == AP_ConnectionStatus::Authenticated ||
-		    status == AP_ConnectionStatus::ConnectionRefused)
-		{
-			_connecting = false;
-			Log(LOG_INFO) << "ArchipelagoManager: Connection process completed, status: " << static_cast<int>(status);
-		}
-	}
-	
-	// APCpp handles updates internally, but we can process messages here if needed
-	// For now, just let APCpp handle everything
+    return _connected && _client && _client->getConnectionStatus() == APConnectionStatus::Authenticated;
 }
 
 /**
- * Notifies that a research project has been completed.
+ * Get connection status
+ * @return connection status
+ */
+APConnectionStatus ArchipelagoManager::getConnectionStatus() const
+{
+    return _client ? _client->getConnectionStatus() : APConnectionStatus::Disconnected;
+}
+
+/**
+ * Get connection info
+ * @return connection info
+ */
+const APConnectionInfo& ArchipelagoManager::getConnectionInfo() const
+{
+    static APConnectionInfo empty;
+    return _client ? _client->getConnectionInfo() : empty;
+}
+
+/**
+ * Start a new game with Archipelago integration
+ */
+void ArchipelagoManager::startNewGame()
+{
+    if (!validateConnection())
+        return;
+    
+    _gameStarted = true;
+    _receivedItems.clear();
+    _checkedLocations.clear();
+}
+
+/**
+ * Load game with Archipelago state
+ * @param save Save game
+ */
+void ArchipelagoManager::loadGame(SavedGame* save)
+{
+    // TODO: Load AP state from save game
+    _gameStarted = true;
+}
+
+/**
+ * Save Archipelago state to save game
+ * @param save Save game
+ */
+void ArchipelagoManager::saveGame(SavedGame* save)
+{
+    // TODO: Save AP state to save game
+}
+
+/**
+ * Handle research completion - send location check
  * @param researchName Name of completed research
  */
 void ArchipelagoManager::onResearchCompleted(const std::string& researchName)
 {
-	if (!_enabled || !isAuthenticated() || !_mapper)
-		return;
-	
-	int64_t locationId = _mapper->getLocationId(researchName);
-	if (locationId == 0)
-	{
-		Log(LOG_DEBUG) << "ArchipelagoManager: Research " << researchName << " not mapped to Archipelago location";
-		return;
-	}
-	
-	Log(LOG_INFO) << "ArchipelagoManager: Sending location check for research: " << researchName << " (ID: " << locationId << ")";
-	
-	// Send location check using APCpp
-	AP_SendItem(locationId);
+    if (!validateConnection())
+        return;
+    
+    int64_t locationId = getLocationFromResearch(researchName);
+    if (locationId > 0)
+    {
+        _client->sendLocationCheck(locationId);
+        
+        // Mark location as checked locally
+        for (auto& location : _checkedLocations)
+        {
+            if (location.locationId == locationId)
+            {
+                location.checked = true;
+                break;
+            }
+        }
+        
+        triggerAutosave();
+    }
 }
 
 /**
- * Grants a research project from Archipelago.
- * @param researchName Name of research to grant
+ * Check if research is unlocked by received items
+ * @param researchName Research name to check
+ * @return true if unlocked
  */
-void ArchipelagoManager::grantResearch(const std::string& researchName)
+bool ArchipelagoManager::isResearchUnlocked(const std::string& researchName) const
 {
-	if (!_game || !_game->getSavedGame() || !_game->getMod())
-	{
-		Log(LOG_ERROR) << "ArchipelagoManager: Cannot grant research - no game or saved game";
-		return;
-	}
-	
-	const RuleResearch* research = _game->getMod()->getResearch(researchName);
-	if (!research)
-	{
-		Log(LOG_ERROR) << "ArchipelagoManager: Cannot grant research - research not found: " << researchName;
-		return;
-	}
-	
-	// Check if already researched
-	if (_game->getSavedGame()->isResearched(researchName, false))
-	{
-		Log(LOG_DEBUG) << "ArchipelagoManager: Research already completed: " << researchName;
-		return;
-	}
-	
-	Log(LOG_INFO) << "ArchipelagoManager: Granting research from Archipelago: " << researchName;
-	
-	// Grant the research without triggering our own location check
-	_game->getSavedGame()->addFinishedResearchSimple(research);
-	
-	Log(LOG_INFO) << "ArchipelagoManager: Successfully granted research: " << researchName;
+    for (const auto& item : _receivedItems)
+    {
+        if (item.received && getResearchFromItemId(item.itemId) == researchName)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
- * Gets the research location mapper.
- * @return Research location mapper
+ * Get list of received research items
+ * @return vector of received items
  */
-ResearchLocationMapper* ArchipelagoManager::getMapper()
+const std::vector<APResearchItem>& ArchipelagoManager::getReceivedItems() const
 {
-	return _mapper.get();
+    return _receivedItems;
 }
 
 /**
- * Gets connection status string for UI.
- * @return Status string
+ * Get list of checked locations
+ * @return vector of checked locations
  */
-std::string ArchipelagoManager::getConnectionStatusString() const
+const std::vector<APResearchLocation>& ArchipelagoManager::getCheckedLocations() const
 {
-	if (!_enabled)
-		return "Disabled";
-	
-	ArchipelagoConnectionState state = getConnectionState();
-	switch (state)
-	{
-		case AP_DISCONNECTED:
-			return "Disconnected";
-		case AP_CONNECTING:
-			return "Connecting...";
-		case AP_CONNECTED:
-			return "Connected";
-		case AP_AUTHENTICATED:
-			return "Authenticated";
-		case AP_ERROR:
-			return "Error";
-		default:
-			return "Unknown";
-	}
+    return _checkedLocations;
 }
 
 /**
- * Gets player info string for UI.
- * @return Player info string
+ * Update the manager (should be called regularly)
  */
-std::string ArchipelagoManager::getPlayerInfoString() const
+void ArchipelagoManager::update()
 {
-	if (!isAuthenticated())
-		return "";
-	
-	std::ostringstream info;
-	info << "Player ID: " << AP_GetPlayerID();
-	info << " | UUID: " << AP_GetUUID();
-	
-	return info.str();
+    if (_client)
+    {
+        _client->update();
+    }
 }
 
-// Static convenience methods
-
 /**
- * Checks if the instance is connected (static).
- * @return True if connected
+ * Force autosave after AP events
  */
-bool ArchipelagoManager::isInstanceConnected()
+void ArchipelagoManager::triggerAutosave()
 {
-	if (!_instance)
-		return false;
-	
-	return _instance->isConnected();
+    // TODO: Trigger game autosave
 }
 
 /**
- * Notifies research completion (static).
- * @param researchName Name of completed research
+ * Initialize research mappings
  */
-void ArchipelagoManager::notifyResearchCompleted(const std::string& researchName)
+void ArchipelagoManager::initializeResearchMappings()
 {
-	if (!_instance)
-		return;
-	
-	_instance->onResearchCompleted(researchName);
+    // Map research names to location IDs
+    _researchToLocationMap[APWorldConfig::RESEARCH_LASER_WEAPONS] = APWorldConfig::LOCATION_LASER_WEAPONS;
+    _researchToLocationMap[APWorldConfig::RESEARCH_MEDI_KIT] = APWorldConfig::LOCATION_MEDI_KIT;
+    _researchToLocationMap[APWorldConfig::RESEARCH_MOTION_SCANNER] = APWorldConfig::LOCATION_MOTION_SCANNER;
+    
+    // Map item IDs to research names
+    _itemToResearchMap[APWorldConfig::ITEM_LASER_WEAPONS] = APWorldConfig::RESEARCH_LASER_WEAPONS;
+    _itemToResearchMap[APWorldConfig::ITEM_MEDI_KIT] = APWorldConfig::RESEARCH_MEDI_KIT;
+    _itemToResearchMap[APWorldConfig::ITEM_MOTION_SCANNER] = APWorldConfig::RESEARCH_MOTION_SCANNER;
 }
 
 /**
- * Updates the instance (static).
+ * Callback for when items are cleared
  */
-void ArchipelagoManager::updateInstance()
+void ArchipelagoManager::onItemsClear()
 {
-	if (!_instance)
-		return;
-	
-	_instance->update();
-}
-
-// APCpp callback implementations
-
-/**
- * APCpp callback: Clear all items (reset game state).
- */
-void ArchipelagoManager::onItemClear()
-{
-	if (!_instance || !_instance->_game)
-		return;
-	
-	Log(LOG_INFO) << "ArchipelagoManager: APCpp requested item clear";
-	
-	// Reset research state - this would need to be implemented based on game requirements
-	// For now, just log the event
+    _receivedItems.clear();
 }
 
 /**
- * APCpp callback: Item received from Archipelago.
- * @param itemId Item ID received
- * @param notify Whether to notify the player
+ * Callback for when item is received
+ * @param itemId Item ID
+ * @param notify Whether to notify player
  */
 void ArchipelagoManager::onItemReceived(int64_t itemId, bool notify)
 {
-	if (!_instance || !_instance->_mapper)
-		return;
-	
-	std::string researchName = _instance->_mapper->getResearchFromItem(itemId);
-	if (researchName.empty())
-	{
-		Log(LOG_WARNING) << "ArchipelagoManager: Received unmapped item: " << itemId;
-		return;
-	}
-	
-	Log(LOG_INFO) << "ArchipelagoManager: Received item from Archipelago: " << researchName << " (ID: " << itemId << ")";
-	
-	// Grant the research
-	_instance->grantResearch(researchName);
+    std::string researchName = getResearchFromItemId(itemId);
+    if (!researchName.empty())
+    {
+        // Add to received items
+        APResearchItem item(itemId, researchName);
+        item.received = true;
+        _receivedItems.push_back(item);
+        
+        // Unlock research immediately
+        unlockResearch(researchName);
+        
+        triggerAutosave();
+    }
 }
 
 /**
- * APCpp callback: Location was checked.
- * @param locationId Location ID that was checked
+ * Callback for when location is checked
+ * @param locationId Location ID
  */
 void ArchipelagoManager::onLocationChecked(int64_t locationId)
 {
-	if (!_instance || !_instance->_mapper)
-		return;
-	
-	std::string researchName = _instance->_mapper->getResearchName(locationId);
-	if (researchName.empty())
-	{
-		Log(LOG_WARNING) << "ArchipelagoManager: Location checked for unmapped location: " << locationId;
-		return;
-	}
-	
-	Log(LOG_INFO) << "ArchipelagoManager: Location checked: " << researchName << " (ID: " << locationId << ")";
+    // Mark location as checked
+    for (auto& location : _checkedLocations)
+    {
+        if (location.locationId == locationId)
+        {
+            location.checked = true;
+            break;
+        }
+    }
+}
+
+/**
+ * Unlock research immediately when item is received
+ * @param researchName Research to unlock
+ */
+void ArchipelagoManager::unlockResearch(const std::string& researchName)
+{
+    // TODO: Implement immediate research unlocking
+    // This should bypass normal research time/cost requirements
+}
+
+/**
+ * Get research name from item ID
+ * @param itemId Item ID
+ * @return research name
+ */
+std::string ArchipelagoManager::getResearchFromItemId(int64_t itemId) const
+{
+    auto it = _itemToResearchMap.find(itemId);
+    return (it != _itemToResearchMap.end()) ? it->second : "";
+}
+
+/**
+ * Get location ID from research name
+ * @param researchName Research name
+ * @return location ID
+ */
+int64_t ArchipelagoManager::getLocationFromResearch(const std::string& researchName) const
+{
+    auto it = _researchToLocationMap.find(researchName);
+    return (it != _researchToLocationMap.end()) ? it->second : 0;
+}
+
+/**
+ * Validate that we're connected before operations
+ * @return true if connected and ready
+ */
+bool ArchipelagoManager::validateConnection() const
+{
+    return _connected && _client && _client->getConnectionStatus() == APConnectionStatus::Authenticated;
 }
 
 }

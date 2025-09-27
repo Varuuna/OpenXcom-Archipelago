@@ -19,105 +19,122 @@
  */
 
 #include "ArchipelagoTypes.h"
-#include "../APCpp/Archipelago.h"
-#include <string>
+#include "ArchipelagoClient.h"
 #include <memory>
+#include <vector>
+#include <map>
 
 namespace OpenXcom
 {
 
-class ResearchLocationMapper;
+class SavedGame;
 class Game;
-class Mod;
-class RuleResearch;
 
 /**
- * Main manager class for Archipelago integration using APCpp library.
- * This class provides the high-level interface for OpenXcom to interact with Archipelago
- * using the APCpp C++ library instead of a custom implementation.
+ * High-level manager for Archipelago integration
+ * Coordinates between game systems and the Archipelago client
+ * Manages connection state, item/location synchronization, and save integration
  */
 class ArchipelagoManager
 {
 private:
-	// Game references
-	Game* _game;
-	
-	// Configuration and state
-	ArchipelagoConfig _config;
-	bool _enabled;
-	bool _initialized;
-	bool _connecting;
-	
-	// Research location mapper (keep existing functionality)
-	std::unique_ptr<ResearchLocationMapper> _mapper;
-	
-	// Singleton instance
-	static ArchipelagoManager* _instance;
-	
-	// Private constructor for singleton
-	ArchipelagoManager();
-	
-	// APCpp callback functions (static C-style callbacks)
-	static void onItemClear();
-	static void onItemReceived(int64_t itemId, bool notify);
-	static void onLocationChecked(int64_t locationId);
-	
+    static ArchipelagoManager* _instance;
+    
+    std::unique_ptr<ArchipelagoClient> _client;
+    Game* _game;
+    
+    // State tracking
+    std::vector<APResearchItem> _receivedItems;
+    std::vector<APResearchLocation> _checkedLocations;
+    bool _connected;
+    bool _gameStarted;
+    
+    // Research mappings
+    std::map<std::string, int64_t> _researchToLocationMap;
+    std::map<int64_t, std::string> _itemToResearchMap;
+    
 public:
-	/// Destructor
-	~ArchipelagoManager();
-	
-	/// Gets the singleton instance
-	static ArchipelagoManager* getInstance();
-	/// Destroys the singleton instance
-	static void destroy();
-	
-	/// Initializes the manager with game reference
-	void initialize(Game* game);
-	/// Shuts down the manager
-	void shutdown();
-	
-	/// Checks if Archipelago is enabled
-	bool isEnabled() const;
-	/// Enables or disables Archipelago
-	void setEnabled(bool enabled);
-	
-	/// Checks if connected to Archipelago server
-	bool isConnected() const;
-	/// Checks if authenticated with Archipelago server
-	bool isAuthenticated() const;
-	/// Gets the current connection state
-	ArchipelagoConnectionState getConnectionState() const;
-	
-	/// Sets the configuration
-	void setConfig(const ArchipelagoConfig& config);
-	/// Gets the current configuration
-	const ArchipelagoConfig& getConfig() const;
-	
-	/// Connects to the Archipelago server
-	bool connect();
-	/// Disconnects from the server
-	void disconnect();
-	
-	/// Updates the manager (call regularly from main game loop)
-	void update();
-	
-	/// Notifies that a research project has been completed
-	void onResearchCompleted(const std::string& researchName);
-	/// Grants a research project from Archipelago
-	void grantResearch(const std::string& researchName);
-	
-	/// Gets the research location mapper
-	ResearchLocationMapper* getMapper();
-	
-	/// Gets connection status string for UI
-	std::string getConnectionStatusString() const;
-	/// Gets player info string for UI
-	std::string getPlayerInfoString() const;
-	
-	// Static convenience methods for global access
-	static bool isInstanceConnected();
-	static void notifyResearchCompleted(const std::string& researchName);
-	static void updateInstance();
+    /// Get the singleton instance
+    static ArchipelagoManager* getInstance();
+    
+    /// Initialize the manager with game reference
+    void initialize(Game* game);
+    
+    /// Cleanup and shutdown
+    void shutdown();
+    
+    /// Connect to Archipelago server
+    bool connect(const APConnectionInfo& connectionInfo);
+    
+    /// Disconnect from server
+    void disconnect();
+    
+    /// Check if connected to Archipelago
+    bool isConnected() const;
+    
+    /// Get connection status
+    APConnectionStatus getConnectionStatus() const;
+    
+    /// Get connection info
+    const APConnectionInfo& getConnectionInfo() const;
+    
+    /// Start a new game with Archipelago integration
+    void startNewGame();
+    
+    /// Load game with Archipelago state
+    void loadGame(SavedGame* save);
+    
+    /// Save Archipelago state to save game
+    void saveGame(SavedGame* save);
+    
+    /// Handle research completion - send location check
+    void onResearchCompleted(const std::string& researchName);
+    
+    /// Check if research is unlocked by received items
+    bool isResearchUnlocked(const std::string& researchName) const;
+    
+    /// Get list of received research items
+    const std::vector<APResearchItem>& getReceivedItems() const;
+    
+    /// Get list of checked locations
+    const std::vector<APResearchLocation>& getCheckedLocations() const;
+    
+    /// Update the manager (should be called regularly)
+    void update();
+    
+    /// Force autosave after AP events
+    void triggerAutosave();
+    
+private:
+    /// Private constructor for singleton
+    ArchipelagoManager();
+    
+    /// Private destructor
+    ~ArchipelagoManager();
+    
+    /// Initialize research mappings
+    void initializeResearchMappings();
+    
+    /// Callback for when items are cleared
+    void onItemsClear();
+    
+    /// Callback for when item is received
+    void onItemReceived(int64_t itemId, bool notify);
+    
+    /// Callback for when location is checked
+    void onLocationChecked(int64_t locationId);
+    
+    /// Unlock research immediately when item is received
+    void unlockResearch(const std::string& researchName);
+    
+    /// Get research name from item ID
+    std::string getResearchFromItemId(int64_t itemId) const;
+    
+    /// Get location ID from research name
+    int64_t getLocationFromResearch(const std::string& researchName) const;
+    
+    /// Validate that we're connected before operations
+    bool validateConnection() const;
 };
 
 }

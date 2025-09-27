@@ -54,7 +54,6 @@
 #include "../Mod/RuleRegion.h"
 #include "MissionStatistics.h"
 #include "SoldierDeath.h"
-#include "../Archipelago/ArchipelagoManager.h"
 
 namespace OpenXcom
 {
@@ -1223,9 +1222,6 @@ void SavedGame::addFinishedResearch(const RuleResearch * research, const Mod * m
 		// 4. process remaining items in the queue
 		++currentQueueIndex;
 	}
-	
-	// 5. Notify Archipelago about research completion
-	ArchipelagoManager::notifyResearchCompleted(research->getName());
 }
 
 /**
