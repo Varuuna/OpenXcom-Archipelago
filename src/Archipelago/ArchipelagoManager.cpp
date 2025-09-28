@@ -23,6 +23,9 @@
 #include "../Mod/Mod.h"
 #include "../Mod/RuleResearch.h"
 #include "../Savegame/Base.h"
+#include "../Savegame/ResearchProject.h"
+#include "../Geoscape/GeoscapeState.h"
+#include <iostream>
 
 namespace OpenXcom
 {
@@ -33,7 +36,7 @@ ArchipelagoManager* ArchipelagoManager::_instance = nullptr;
 /**
  * Private constructor for singleton
  */
-ArchipelagoManager::ArchipelagoManager() : _game(nullptr), _connected(false), _gameStarted(false)
+ArchipelagoManager::ArchipelagoManager() : _game(nullptr), _geoscapeState(nullptr), _connected(false), _gameStarted(false), _locationsScouted(false)
 {
     _client = std::make_unique<ArchipelagoClient>();
 }
@@ -72,6 +75,7 @@ void ArchipelagoManager::initialize(Game* game)
     _client->setItemClearCallback([this]() { onItemsClear(); });
     _client->setItemRecvCallback([this](int64_t itemId, bool notify) { onItemReceived(itemId, notify); });
     _client->setLocationCheckedCallback([this](int64_t locationId) { onLocationChecked(locationId); });
+    _client->setLocationInfoCallback([this](std::vector<AP_NetworkItem> items) { onLocationInfoReceived(items); });
 }
 
 /**
@@ -106,6 +110,9 @@ bool ArchipelagoManager::connect(const APConnectionInfo& connectionInfo)
         
         // Initialize location mappings for this connection
         initializeLocationMappings();
+        
+        // Don't scout locations immediately - wait for authentication
+        // Location scouting will be triggered in update() when authenticated
     }
     
     return result;
@@ -121,6 +128,7 @@ void ArchipelagoManager::disconnect()
         _client->disconnect();
     }
     _connected = false;
+    _locationsScouted = false; // Reset so we can scout again on reconnection
 }
 
 /**
@@ -156,12 +164,27 @@ const APConnectionInfo& ArchipelagoManager::getConnectionInfo() const
  */
 void ArchipelagoManager::startNewGame()
 {
-    if (!validateConnection())
-        return;
+    std::cout << "[AP] startNewGame() called" << std::endl;
+    std::cout << "[AP] Connection status: " << (int)getConnectionStatus() << std::endl;
+    std::cout << "[AP] Connected: " << (_connected ? "true" : "false") << std::endl;
+    std::cout << "[AP] Client exists: " << (_client ? "true" : "false") << std::endl;
     
+    if (!validateConnection())
+    {
+        std::cout << "[AP] validateConnection() failed, will wait for authentication" << std::endl;
+        _gameStarted = true; // Mark as started so we can add projects later
+        _receivedItems.clear();
+        _checkedLocations.clear();
+        return;
+    }
+    
+    std::cout << "[AP] Connection validated, starting new game" << std::endl;
     _gameStarted = true;
     _receivedItems.clear();
     _checkedLocations.clear();
+    
+    // Don't add research projects immediately - wait for location scouting to complete
+    // This will be done in onLocationInfoReceived() after we get the AP item names
 }
 
 /**
@@ -209,6 +232,7 @@ void ArchipelagoManager::onResearchCompleted(const std::string& researchName)
     int64_t locationId = getLocationFromResearch(researchName);
     if (locationId > 0)
     {
+        // Always send the location check to the AP server - let the server handle duplicates
         _client->sendLocationCheck(locationId);
         
         // Mark location as checked locally
@@ -229,6 +253,26 @@ void ArchipelagoManager::onResearchCompleted(const std::string& researchName)
             APResearchLocation location(locationId, researchName + " Location", researchName);
             location.checked = true;
             _checkedLocations.push_back(location);
+        }
+        
+        // Show notification for sent item using location data
+        if (_geoscapeState)
+        {
+            auto locationDataIt = _locationData.find(locationId);
+            if (locationDataIt != _locationData.end())
+            {
+                const AP_NetworkItem& item = locationDataIt->second;
+                std::string notificationText = "Sent " + item.itemName + " to " + item.playerName;
+                _geoscapeState->addAPNotification(notificationText, 133); // Green color for sent items
+                std::cout << "[AP] Notification: " << notificationText << std::endl;
+            }
+            else
+            {
+                // Fallback if location data not available
+                std::string notificationText = "Sent item for " + researchName;
+                _geoscapeState->addAPNotification(notificationText, 133);
+                std::cout << "[AP] Notification (fallback): " << notificationText << std::endl;
+            }
         }
         
         triggerAutosave();
@@ -278,8 +322,41 @@ void ArchipelagoManager::update()
     if (_client)
     {
         _client->update();
+        
+        // Server messages are processed through callbacks, no need for separate processing
+        
+        // Scout locations once we're authenticated and haven't done it yet
+        if (!_locationsScouted && isConnected())
+        {
+            std::cout << "[AP] Now authenticated, scouting locations..." << std::endl;
+            std::cout << "[AP] Game started: " << (_gameStarted ? "true" : "false") << std::endl;
+            
+            // If game was started but we weren't authenticated yet, mark it as started now
+            if (!_gameStarted)
+            {
+                std::cout << "[AP] Setting game started to true since we're now authenticated" << std::endl;
+                _gameStarted = true;
+                _receivedItems.clear();
+                _checkedLocations.clear();
+            }
+            
+            createDynamicResearchProjects();
+            _locationsScouted = true;
+        }
+        
+        // AP research names are now available for use in research screens
+        // No need to automatically add research projects - let the player choose them
+    }
+    else
+    {
+        static int logCount = 0;
+        if (logCount++ < 5) // Only log first few times to avoid spam
+        {
+            std::cout << "[AP] update() called but no client exists" << std::endl;
+        }
     }
 }
+
 
 /**
  * Force autosave after AP events
@@ -354,6 +431,14 @@ void ArchipelagoManager::onItemReceived(int64_t itemId, bool notify)
         item.received = true;
         _receivedItems.push_back(item);
         
+        // Show simple notification for received item
+        if (_geoscapeState && notify)
+        {
+            std::string notificationText = "Received " + researchName + " research";
+            _geoscapeState->addAPNotification(notificationText, 138); // Blue color for received items
+            std::cout << "[AP] Notification: " << notificationText << std::endl;
+        }
+        
         // Unlock research immediately
         unlockResearch(researchName);
         
@@ -384,8 +469,52 @@ void ArchipelagoManager::onLocationChecked(int64_t locationId)
  */
 void ArchipelagoManager::unlockResearch(const std::string& researchName)
 {
-    // TODO: Implement immediate research unlocking
-    // This should bypass normal research time/cost requirements
+    if (!_game || !_game->getSavedGame())
+        return;
+    
+    SavedGame* save = _game->getSavedGame();
+    Mod* mod = _game->getMod();
+    
+    // Get the research rule
+    const RuleResearch* research = mod->getResearch(researchName, false);
+    if (!research)
+    {
+        std::cout << "[AP] Warning: Research rule not found for: " << researchName << std::endl;
+        return;
+    }
+    
+    // Check if already researched
+    if (save->isResearched(researchName, false))
+    {
+        std::cout << "[AP] Research already completed: " << researchName << std::endl;
+        return;
+    }
+    
+    std::cout << "[AP] Unlocking research: " << researchName << std::endl;
+    
+    // Remove from completed-but-not-unlocked tracking
+    _completedButNotUnlockedResearch.erase(researchName);
+    
+    // Add the research as completed to all bases
+    for (auto* base : *save->getBases())
+    {
+        save->addFinishedResearch(research, mod, base);
+    }
+    
+    // Also handle lookup research if it exists
+    if (!research->getLookup().empty())
+    {
+        const RuleResearch* lookupResearch = mod->getResearch(research->getLookup(), false);
+        if (lookupResearch)
+        {
+            for (auto* base : *save->getBases())
+            {
+                save->addFinishedResearch(lookupResearch, mod, base);
+            }
+        }
+    }
+    
+    std::cout << "[AP] Research unlocked successfully: " << researchName << std::endl;
 }
 
 /**
@@ -417,6 +546,248 @@ int64_t ArchipelagoManager::getLocationFromResearch(const std::string& researchN
 bool ArchipelagoManager::validateConnection() const
 {
     return _connected && _client && _client->getConnectionStatus() == APConnectionStatus::Authenticated;
+}
+
+/**
+ * Get the AP item name that will be sent for this research
+ * @param researchName Original research name
+ * @return AP item name (e.g., "Flute (Player1)")
+ */
+std::string ArchipelagoManager::getAPItemNameForResearch(const std::string& researchName) const
+{
+    auto it = _apResearchNames.find(researchName);
+    return (it != _apResearchNames.end()) ? it->second : researchName;
+}
+
+/**
+ * Check if this research should use AP naming
+ * @param researchName Research name to check
+ * @return true if this is an AP research
+ */
+bool ArchipelagoManager::isAPResearch(const std::string& researchName) const
+{
+    return _apResearchNames.find(researchName) != _apResearchNames.end();
+}
+
+/**
+ * Check if research should skip automatic unlocking (for AP-mapped research)
+ * @param researchName Research name to check
+ * @return true if automatic unlocking should be skipped
+ */
+bool ArchipelagoManager::shouldSkipResearchUnlock(const std::string& researchName) const
+{
+    // Skip automatic unlocking if this research is mapped to an AP location
+    return isConnected() && (_researchToLocationMap.find(researchName) != _researchToLocationMap.end());
+}
+
+/**
+ * Check if research is completed but not yet unlocked (for AP research filtering)
+ * @param researchName Research name to check
+ * @return true if research is completed but not unlocked
+ */
+bool ArchipelagoManager::isResearchCompletedButNotUnlocked(const std::string& researchName) const
+{
+    return _completedButNotUnlockedResearch.find(researchName) != _completedButNotUnlockedResearch.end();
+}
+
+/**
+ * Mark research as completed but not unlocked (for AP research tracking)
+ * @param researchName Research name to mark
+ */
+void ArchipelagoManager::markResearchCompletedButNotUnlocked(const std::string& researchName)
+{
+    _completedButNotUnlockedResearch.insert(researchName);
+}
+
+/**
+ * Create dynamic research projects from AP locations
+ */
+void ArchipelagoManager::createDynamicResearchProjects()
+{
+    if (!validateConnection())
+    {
+        std::cout << "[AP] Cannot create dynamic research projects - not connected" << std::endl;
+        return;
+    }
+    
+    std::cout << "[AP] Dynamic research projects initialized - using original research names" << std::endl;
+    std::cout << "[AP] Research to location map size: " << _researchToLocationMap.size() << std::endl;
+    
+    // Clear any existing AP research names - we're using original names
+    _apResearchNames.clear();
+    
+    std::cout << "[AP] Research projects will use original OpenXcom names" << std::endl;
+}
+
+/**
+ * Get list of AP research projects to be created
+ * @return vector of pairs (original_name, ap_display_name)
+ */
+std::vector<std::pair<std::string, std::string>> ArchipelagoManager::getAPResearchProjects() const
+{
+    std::vector<std::pair<std::string, std::string>> projects;
+    
+    for (const auto& pair : _apResearchNames)
+    {
+        projects.push_back({pair.first, pair.second});
+    }
+    
+    return projects;
+}
+
+/**
+ * Callback for when location info is received
+ * @param items Vector of location items from server
+ */
+void ArchipelagoManager::onLocationInfoReceived(const std::vector<AP_NetworkItem>& items)
+{
+    std::cout << "[AP] Received location info for " << items.size() << " items" << std::endl;
+    
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        const auto& item = items[i];
+        std::cout << "[AP] Item " << (i+1) << ":" << std::endl;
+        std::cout << "[AP]   Location ID: " << item.location << std::endl;
+        std::cout << "[AP]   Item ID: " << item.item << std::endl;
+        std::cout << "[AP]   Item Name: '" << item.itemName << "'" << std::endl;
+        std::cout << "[AP]   Location Name: '" << item.locationName << "'" << std::endl;
+        std::cout << "[AP]   Player ID: " << item.player << std::endl;
+        std::cout << "[AP]   Player Name: '" << item.playerName << "'" << std::endl;
+        std::cout << "[AP]   Flags: " << item.flags << std::endl;
+        
+        _locationData[item.location] = item;
+        
+        // Find the research name that corresponds to this location
+        std::string researchName;
+        for (const auto& pair : _researchToLocationMap)
+        {
+            if (pair.second == item.location)
+            {
+                researchName = pair.first;
+                break;
+            }
+        }
+        
+        if (!researchName.empty())
+        {
+            // Create AP display name: "ItemName (PlayerName)"
+            std::string apDisplayName = item.itemName + " (" + item.playerName + ")";
+            _apResearchNames[researchName] = apDisplayName;
+            
+            std::cout << "[AP] Mapped research '" << researchName << "' -> '" << apDisplayName << "'" << std::endl;
+        }
+        else
+        {
+            std::cout << "[AP] No research mapping found for location " << item.location << std::endl;
+        }
+    }
+    
+    std::cout << "[AP] Dynamic research mapping complete with " << _apResearchNames.size() << " mappings!" << std::endl;
+    
+    // Now that we have the AP item names, add research projects to the first base
+    if (_gameStarted && _game && _game->getSavedGame() && !_game->getSavedGame()->getBases()->empty())
+    {
+        Base* firstBase = _game->getSavedGame()->getBases()->front();
+        addAPResearchProjectsToBase(firstBase);
+        std::cout << "[AP] Research projects added with proper AP names!" << std::endl;
+    }
+    else
+    {
+        std::cout << "[AP] Cannot add research projects - game not started or no bases available" << std::endl;
+        std::cout << "[AP]   Game started: " << (_gameStarted ? "true" : "false") << std::endl;
+        std::cout << "[AP]   Game exists: " << (_game ? "true" : "false") << std::endl;
+        if (_game && _game->getSavedGame())
+        {
+            std::cout << "[AP]   Bases count: " << _game->getSavedGame()->getBases()->size() << std::endl;
+        }
+    }
+}
+
+/**
+ * Add AP research projects to a base
+ * @param base Base to add research projects to
+ */
+void ArchipelagoManager::addAPResearchProjectsToBase(Base* base)
+{
+    if (!base || !_game || !_game->getMod())
+    {
+        std::cout << "[AP] Cannot add research projects - missing base, game, or mod" << std::endl;
+        return;
+    }
+    
+    std::cout << "[AP] Adding AP research projects to base..." << std::endl;
+    std::cout << "[AP] Current AP research names map size: " << _apResearchNames.size() << std::endl;
+    
+    // Debug: Print all AP research names
+    for (const auto& pair : _apResearchNames)
+    {
+        std::cout << "[AP] AP Name mapping: " << pair.first << " -> " << pair.second << std::endl;
+    }
+    
+    Mod* mod = _game->getMod();
+    
+    // Check if base already has research projects
+    std::cout << "[AP] Base currently has " << base->getResearch().size() << " research projects" << std::endl;
+    
+    // Add research projects for each AP location
+    for (const auto& pair : _researchToLocationMap)
+    {
+        const std::string& researchName = pair.first;
+        
+        // Check if this research already exists in the base
+        bool alreadyExists = false;
+        for (const auto* existingProject : base->getResearch())
+        {
+            if (existingProject->getRules()->getName() == researchName)
+            {
+                alreadyExists = true;
+                std::cout << "[AP] Research project already exists: " << researchName << std::endl;
+                break;
+            }
+        }
+        
+        if (alreadyExists)
+            continue;
+        
+        // Get the research rule
+        const RuleResearch* research = mod->getResearch(researchName, false);
+        if (!research)
+        {
+            std::cout << "[AP] Warning: Research rule not found for: " << researchName << std::endl;
+            continue;
+        }
+        
+        // Create a new research project
+        ResearchProject* project = new ResearchProject(const_cast<RuleResearch*>(research), research->getCost());
+        
+        // Add the project to the base
+        base->addResearch(project);
+        
+        std::cout << "[AP] Added research project: " << researchName << std::endl;
+        
+        // Check if we have an AP name for this research
+        auto apNameIt = _apResearchNames.find(researchName);
+        if (apNameIt != _apResearchNames.end())
+        {
+            std::cout << "[AP] This research has AP name: " << apNameIt->second << std::endl;
+        }
+        else
+        {
+            std::cout << "[AP] No AP name found for research: " << researchName << std::endl;
+        }
+    }
+    
+    std::cout << "[AP] AP research projects added successfully!" << std::endl;
+    std::cout << "[AP] Base now has " << base->getResearch().size() << " research projects" << std::endl;
+}
+
+/**
+ * Set the current Geoscape state for notifications
+ * @param geoscape Pointer to the current GeoscapeState
+ */
+void ArchipelagoManager::setGeoscapeState(GeoscapeState* geoscape)
+{
+    _geoscapeState = geoscape;
 }
 
 }

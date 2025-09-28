@@ -103,7 +103,14 @@ bool ArchipelagoClient::initialize(const APConnectionInfo& connectionInfo)
         AP_SetItemClearCallback([this]() { onItemClear(); });
         AP_SetItemRecvCallback([this](int64_t itemId, bool notify) { onItemReceived(itemId, notify); });
         AP_SetLocationCheckedCallback([this](int64_t locationId) { onLocationChecked(locationId); });
+        AP_SetLocationInfoCallback([this](std::vector<AP_NetworkItem> items) {
+            if (_locationInfoCallback) _locationInfoCallback(items);
+        });
         std::cout << "[AP] Callbacks set up successfully" << std::endl;
+        
+        // Enable message queuing for item send/receive notifications
+        std::cout << "[AP] Enabling message queuing..." << std::endl;
+        AP_EnableQueueItemRecvMsgs(true);
         
         // AP_Init only sets up parameters, we need to call AP_Start to actually initialize
         std::cout << "[AP] Calling AP_Start()..." << std::endl;
@@ -322,6 +329,52 @@ void ArchipelagoClient::setLocationCheckedCallback(std::function<void(int64_t)> 
 }
 
 /**
+ * Set callback for when location info is received
+ * @param callback Callback function
+ */
+void ArchipelagoClient::setLocationInfoCallback(std::function<void(std::vector<AP_NetworkItem>)> callback)
+{
+    _locationInfoCallback = callback;
+}
+
+/**
+ * Send location scouts to get item information
+ * @param locationIds Set of location IDs to scout
+ * @param createAsHint Whether to create as hint (default 0)
+ */
+void ArchipelagoClient::sendLocationScouts(const std::set<int64_t>& locationIds, int createAsHint)
+{
+    std::cout << "[AP] sendLocationScouts called with " << locationIds.size() << " locations" << std::endl;
+    std::cout << "[AP] Initialized: " << (_initialized ? "true" : "false") << std::endl;
+    std::cout << "[AP] Connection status: " << static_cast<int>(_connectionStatus) << std::endl;
+    
+    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
+    {
+        std::cout << "[AP] Calling AP_SendLocationScouts..." << std::endl;
+        for (const auto& id : locationIds)
+        {
+            std::cout << "[AP]   Location ID: " << id << std::endl;
+        }
+        std::cout << "[AP]   CreateAsHint: " << createAsHint << std::endl;
+        
+        try {
+            AP_SendLocationScouts(locationIds, createAsHint);
+            std::cout << "[AP] AP_SendLocationScouts completed successfully" << std::endl;
+        }
+        catch (const std::exception& e) {
+            std::cout << "[AP] Exception in AP_SendLocationScouts: " << e.what() << std::endl;
+        }
+        catch (...) {
+            std::cout << "[AP] Unknown exception in AP_SendLocationScouts" << std::endl;
+        }
+    }
+    else
+    {
+        std::cout << "[AP] Cannot send location scouts - not authenticated" << std::endl;
+    }
+}
+
+/**
  * Check if there are pending messages
  * @return true if messages pending
  */
@@ -386,6 +439,16 @@ void ArchipelagoClient::update()
             _connectionInfo.playerId = AP_GetPlayerID();
         }
     }
+}
+
+/**
+ * Process pending server messages for notifications
+ */
+void ArchipelagoClient::processMessages()
+{
+    // This method is intentionally simple - it just exposes the APCpp message system
+    // The actual message processing logic is handled by the ArchipelagoManager
+    // which calls isMessagePending(), getLatestMessage(), and clearLatestMessage()
 }
 
 /**

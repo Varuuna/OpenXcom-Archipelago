@@ -40,6 +40,7 @@
 #include "FileMap.h"
 #include "Unicode.h"
 #include "../Menu/TestState.h"
+#include "../Archipelago/ArchipelagoManager.h"
 
 namespace OpenXcom
 {
@@ -106,6 +107,9 @@ Game::Game(const std::string &title) : _screen(0), _cursor(0), _lang(0), _save(0
 	_lang = new Language();
 
 	_timeOfLastFrame = 0;
+	
+	// Initialize Archipelago Manager
+	ArchipelagoManager::getInstance()->initialize(this);
 }
 
 /**
@@ -294,6 +298,9 @@ void Game::run()
 			// Process logic
 			_states.back()->think();
 			_fpsCounter->think();
+			
+			// Update Archipelago Manager
+			ArchipelagoManager::getInstance()->update();
 			
 			if (Options::FPS > 0 && !(Options::useOpenGL && Options::vSyncForOpenGL))
 			{

@@ -23,12 +23,15 @@
 #include <memory>
 #include <vector>
 #include <map>
+#include <set>
 
 namespace OpenXcom
 {
 
 class SavedGame;
 class Game;
+class Base;
+class GeoscapeState;
 
 /**
  * High-level manager for Archipelago integration
@@ -42,16 +45,25 @@ private:
     
     std::unique_ptr<ArchipelagoClient> _client;
     Game* _game;
+    GeoscapeState* _geoscapeState;
     
     // State tracking
     std::vector<APResearchItem> _receivedItems;
     std::vector<APResearchLocation> _checkedLocations;
     bool _connected;
     bool _gameStarted;
+    bool _locationsScouted;
     
     // Research mappings
     std::map<std::string, int64_t> _researchToLocationMap;
     std::map<int64_t, std::string> _itemToResearchMap;
+    
+    // Track AP research that has been completed but not yet unlocked
+    std::set<std::string> _completedButNotUnlockedResearch;
+    
+    // Dynamic location data from server
+    std::map<int64_t, AP_NetworkItem> _locationData;
+    std::map<std::string, std::string> _apResearchNames; // Maps original research name to AP display name
     
 public:
     /// Get the singleton instance
@@ -81,6 +93,9 @@ public:
     /// Start a new game with Archipelago integration
     void startNewGame();
     
+    /// Add AP research projects to a base
+    void addAPResearchProjectsToBase(Base* base);
+    
     /// Load game with Archipelago state
     void loadGame(SavedGame* save);
     
@@ -105,6 +120,24 @@ public:
     /// Force autosave after AP events
     void triggerAutosave();
     
+    /// Get the AP item name that will be sent for this research
+    std::string getAPItemNameForResearch(const std::string& researchName) const;
+    
+    /// Check if this research should use AP naming
+    bool isAPResearch(const std::string& researchName) const;
+    
+    /// Check if research should skip automatic unlocking (for AP-mapped research)
+    bool shouldSkipResearchUnlock(const std::string& researchName) const;
+    
+    /// Check if research is completed but not yet unlocked (for AP research filtering)
+    bool isResearchCompletedButNotUnlocked(const std::string& researchName) const;
+    
+    /// Mark research as completed but not unlocked (for AP research tracking)
+    void markResearchCompletedButNotUnlocked(const std::string& researchName);
+    
+    /// Set the current Geoscape state for notifications
+    void setGeoscapeState(GeoscapeState* geoscape);
+    
 private:
     /// Private constructor for singleton
     ArchipelagoManager();
@@ -127,6 +160,9 @@ private:
     /// Callback for when location is checked
     void onLocationChecked(int64_t locationId);
     
+    /// Callback for when location info is received
+    void onLocationInfoReceived(const std::vector<AP_NetworkItem>& items);
+    
     /// Unlock research immediately when item is received
     void unlockResearch(const std::string& researchName);
     
@@ -135,6 +171,12 @@ private:
     
     /// Get location ID from research name
     int64_t getLocationFromResearch(const std::string& researchName) const;
+    
+    /// Create dynamic research projects from AP locations
+    void createDynamicResearchProjects();
+    
+    /// Get list of AP research projects to be created
+    std::vector<std::pair<std::string, std::string>> getAPResearchProjects() const;
     
     /// Validate that we're connected before operations
     bool validateConnection() const;

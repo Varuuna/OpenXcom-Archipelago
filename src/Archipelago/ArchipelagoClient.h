@@ -41,6 +41,7 @@ private:
     std::function<void()> _itemClearCallback;
     std::function<void(int64_t, bool)> _itemRecvCallback;
     std::function<void(int64_t)> _locationCheckedCallback;
+    std::function<void(std::vector<AP_NetworkItem>)> _locationInfoCallback;
     
 public:
     /// Creates the Archipelago client
@@ -91,6 +92,12 @@ public:
     /// Set callback for when locations are checked
     void setLocationCheckedCallback(std::function<void(int64_t)> callback);
     
+    /// Set callback for when location info is received
+    void setLocationInfoCallback(std::function<void(std::vector<AP_NetworkItem>)> callback);
+    
+    /// Send location scouts to get item information
+    void sendLocationScouts(const std::set<int64_t>& locationIds, int createAsHint = 0);
+    
     /// Check if there are pending messages
     bool isMessagePending() const;
     
@@ -105,6 +112,9 @@ public:
     
     /// Update the client (should be called regularly)
     void update();
+    
+    /// Process pending server messages for notifications
+    void processMessages();
     
     /// Get error message for connection errors
     static std::string getErrorMessage(APConnectionError error);

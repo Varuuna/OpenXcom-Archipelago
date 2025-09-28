@@ -104,6 +104,7 @@
 #include "../Engine/Exception.h"
 #include "../Mod/AlienDeployment.h"
 #include "../Mod/RuleInterface.h"
+#include "../Archipelago/ArchipelagoManager.h"
 #include "../fmath.h"
 
 namespace OpenXcom
@@ -174,6 +175,12 @@ GeoscapeState::GeoscapeState() : _pause(false), _zoomInEffectDone(false), _zoomO
 
 	_txtDebug = new Text(200, 32, 0, 0);
 
+	// Initialize Archipelago notification text elements (bottom left corner)
+	for (int i = 0; i < AP_MAX_NOTIFICATIONS; i++)
+	{
+		_txtAPNotifications[i] = new Text(500, 16, 5, screenHeight - 25 - (i * 16));
+	}
+
 	// Set palette
 	setInterface("geoscape");
 
@@ -218,6 +225,14 @@ GeoscapeState::GeoscapeState() : _pause(false), _zoomInEffectDone(false), _zoomO
 	add(_txtYear, "text", "geoscape");
 
 	add(_txtDebug, "text", "geoscape");
+
+	// Add Archipelago notification text elements
+	for (int i = 0; i < AP_MAX_NOTIFICATIONS; i++)
+	{
+		add(_txtAPNotifications[i], "text", "geoscape");
+		_txtAPNotifications[i]->setVisible(false);
+		_txtAPNotifications[i]->setSmall();
+	}
 
 	// Set up objects
 	Surface *geobord = _game->getMod()->getSurface("GEOBORD.SCR");
@@ -381,6 +396,9 @@ GeoscapeState::GeoscapeState() : _pause(false), _zoomInEffectDone(false), _zoomO
 	_dogfightStartTimer->onTimer((StateHandler)&GeoscapeState::startDogfight);
 	_dogfightTimer->onTimer((StateHandler)&GeoscapeState::handleDogfights);
 
+	// Register with ArchipelagoManager for notifications
+	ArchipelagoManager::getInstance()->setGeoscapeState(this);
+
 	timeDisplay();
 }
 
@@ -389,11 +407,20 @@ GeoscapeState::GeoscapeState() : _pause(false), _zoomInEffectDone(false), _zoomO
  */
 GeoscapeState::~GeoscapeState()
 {
+	// Unregister from ArchipelagoManager
+	ArchipelagoManager::getInstance()->setGeoscapeState(nullptr);
+
 	delete _gameTimer;
 	delete _zoomInEffectTimer;
 	delete _zoomOutEffectTimer;
 	delete _dogfightStartTimer;
 	delete _dogfightTimer;
+
+	// Clean up AP notification text elements
+	for (int i = 0; i < AP_MAX_NOTIFICATIONS; i++)
+	{
+		delete _txtAPNotifications[i];
+	}
 
 	std::list<DogfightState*>::iterator it = _dogfights.begin();
 	for (; it != _dogfights.end();)
@@ -554,6 +581,9 @@ void GeoscapeState::think()
 	_zoomInEffectTimer->think(this, 0);
 	_zoomOutEffectTimer->think(this, 0);
 	_dogfightStartTimer->think(this, 0);
+
+	// Update Archipelago notifications
+	updateAPNotifications();
 
 	if (_popups.empty() && _dogfights.empty() && (!_zoomInEffectTimer->isRunning() || _zoomInEffectDone) && (!_zoomOutEffectTimer->isRunning() || _zoomOutEffectDone))
 	{
@@ -1581,10 +1611,16 @@ void GeoscapeState::time1Day()
 					size_t pick = RNG::generate(0, possibilities.size()-1);
 					std::string sel = possibilities.at(pick);
 					bonus = _game->getMod()->getResearch(sel, true);
-					_game->getSavedGame()->addFinishedResearch(bonus, _game->getMod(), (*i));
-					if (!bonus->getLookup().empty())
+					
+					// Check if bonus research should skip automatic unlocking
+					bool shouldSkipBonusUnlock = ArchipelagoManager::getInstance()->shouldSkipResearchUnlock(bonus->getName());
+					if (!shouldSkipBonusUnlock)
 					{
-						_game->getSavedGame()->addFinishedResearch(_game->getMod()->getResearch(bonus->getLookup(), true), _game->getMod(), (*i));
+						_game->getSavedGame()->addFinishedResearch(bonus, _game->getMod(), (*i));
+						if (!bonus->getLookup().empty())
+						{
+							_game->getSavedGame()->addFinishedResearch(_game->getMod()->getResearch(bonus->getLookup(), true), _game->getMod(), (*i));
+						}
 					}
 				}
 			}
@@ -1596,11 +1632,20 @@ void GeoscapeState::time1Day()
 			{
 				newResearch = 0;
 			}
-			// 3e. handle core research (topic+lookup)
-			_game->getSavedGame()->addFinishedResearch(research, _game->getMod(), (*i));
-			if (!research->getLookup().empty())
+			// 3e. handle core research (topic+lookup) - but skip if this is AP-mapped research
+			bool shouldSkipUnlock = ArchipelagoManager::getInstance()->shouldSkipResearchUnlock(research->getName());
+			if (!shouldSkipUnlock)
 			{
-				_game->getSavedGame()->addFinishedResearch(_game->getMod()->getResearch(research->getLookup(), true), _game->getMod(), (*i));
+				_game->getSavedGame()->addFinishedResearch(research, _game->getMod(), (*i));
+				if (!research->getLookup().empty())
+				{
+					_game->getSavedGame()->addFinishedResearch(_game->getMod()->getResearch(research->getLookup(), true), _game->getMod(), (*i));
+				}
+			}
+			else
+			{
+				// Track that this AP research has been completed but not unlocked
+				ArchipelagoManager::getInstance()->markResearchCompletedButNotUnlocked(research->getName());
 			}
 			// 3e. handle cutscenes
 			if (!research->getCutscene().empty())
@@ -1613,6 +1658,14 @@ void GeoscapeState::time1Day()
 			}
 			// 3e. handle research complete popup + ufopedia article popups (topic+bonus)
 			popup(new ResearchCompleteState(newResearch, bonus, research));
+			
+			// 3e.1. handle Archipelago integration - send location check for completed research
+			// This should always run for AP-mapped research, regardless of whether we skipped unlocking
+			if (ArchipelagoManager::getInstance()->isConnected())
+			{
+				ArchipelagoManager::getInstance()->onResearchCompleted(research->getName());
+			}
+			
 			// 3f. reset timer
 			timerReset();
 			// 3g. warning if weapon is researched before its clip
@@ -2740,6 +2793,58 @@ void GeoscapeState::resize(int &dX, int &dY)
 bool GeoscapeState::buttonsDisabled()
 {
 	return _zoomInEffectTimer->isRunning() || _zoomOutEffectTimer->isRunning();
+}
+
+/**
+ * Add an Archipelago notification message
+ * @param message The message text to display
+ * @param color The text color (different for sent vs received)
+ */
+void GeoscapeState::addAPNotification(const std::string& message, Uint8 color)
+{
+	// Remove oldest message if we're at capacity
+	if (_apNotifications.size() >= AP_MAX_NOTIFICATIONS)
+	{
+		_apNotifications.erase(_apNotifications.begin());
+	}
+	
+	// Add new message with 30 second timer (30000ms) - 3x longer duration
+	_apNotifications.push_back(APNotificationMessage(message, 30000, color));
+}
+
+/**
+ * Update Archipelago notification timers and display
+ */
+void GeoscapeState::updateAPNotifications()
+{
+	// Update timers and remove expired messages
+	for (auto it = _apNotifications.begin(); it != _apNotifications.end();)
+	{
+		it->remainingTime -= Options::geoClockSpeed; // Subtract frame time
+		if (it->remainingTime <= 0 || !it->active)
+		{
+			it = _apNotifications.erase(it);
+		}
+		else
+		{
+			++it;
+		}
+	}
+	
+	// Update text elements
+	for (int i = 0; i < AP_MAX_NOTIFICATIONS; i++)
+	{
+		if (i < _apNotifications.size() && _apNotifications[i].active)
+		{
+			_txtAPNotifications[i]->setText(_apNotifications[i].text);
+			_txtAPNotifications[i]->setColor(_apNotifications[i].color);
+			_txtAPNotifications[i]->setVisible(true);
+		}
+		else
+		{
+			_txtAPNotifications[i]->setVisible(false);
+		}
+	}
 }
 
 }

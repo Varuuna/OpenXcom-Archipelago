@@ -28,6 +28,7 @@
 #include "../Geoscape/BuildNewBaseState.h"
 #include "../Engine/Options.h"
 #include "../Savegame/SavedGame.h"
+#include "../Archipelago/ArchipelagoManager.h"
 
 namespace OpenXcom
 {
@@ -145,6 +146,9 @@ void NewGameState::btnOkClick(Action *)
 	save->setDifficulty(diff);
 	save->setIronman(_btnIronman->getPressed());
 	_game->setSavedGame(save);
+
+	// Initialize Archipelago for new game
+	ArchipelagoManager::getInstance()->startNewGame();
 
 	GeoscapeState *gs = new GeoscapeState;
 	_game->setState(gs);
