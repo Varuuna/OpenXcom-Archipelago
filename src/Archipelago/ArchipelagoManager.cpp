@@ -20,6 +20,9 @@
 #include "ArchipelagoManager.h"
 #include "../Engine/Game.h"
 #include "../Savegame/SavedGame.h"
+#include "../Mod/Mod.h"
+#include "../Mod/RuleResearch.h"
+#include "../Savegame/Base.h"
 
 namespace OpenXcom
 {
@@ -96,8 +99,16 @@ bool ArchipelagoManager::connect(const APConnectionInfo& connectionInfo)
         return false;
     }
     
-    _connected = _client->connect();
-    return _connected;
+    bool result = _client->connect();
+    if (result)
+    {
+        _connected = true;
+        
+        // Initialize location mappings for this connection
+        initializeLocationMappings();
+    }
+    
+    return result;
 }
 
 /**
@@ -159,8 +170,18 @@ void ArchipelagoManager::startNewGame()
  */
 void ArchipelagoManager::loadGame(SavedGame* save)
 {
-    // TODO: Load AP state from save game
+    if (!save)
+        return;
+    
     _gameStarted = true;
+    
+    // TODO: Load AP state from save game YAML
+    // For now, clear state and let AP sync
+    _receivedItems.clear();
+    _checkedLocations.clear();
+    
+    // Initialize location mappings
+    initializeLocationMappings();
 }
 
 /**
@@ -169,7 +190,11 @@ void ArchipelagoManager::loadGame(SavedGame* save)
  */
 void ArchipelagoManager::saveGame(SavedGame* save)
 {
-    // TODO: Save AP state to save game
+    if (!save)
+        return;
+    
+    // TODO: Save AP state to save game YAML
+    // This will be implemented in Phase 3.3
 }
 
 /**
@@ -187,13 +212,23 @@ void ArchipelagoManager::onResearchCompleted(const std::string& researchName)
         _client->sendLocationCheck(locationId);
         
         // Mark location as checked locally
+        bool found = false;
         for (auto& location : _checkedLocations)
         {
             if (location.locationId == locationId)
             {
                 location.checked = true;
+                found = true;
                 break;
             }
+        }
+        
+        // Add location if not found
+        if (!found)
+        {
+            APResearchLocation location(locationId, researchName + " Location", researchName);
+            location.checked = true;
+            _checkedLocations.push_back(location);
         }
         
         triggerAutosave();
@@ -251,7 +286,16 @@ void ArchipelagoManager::update()
  */
 void ArchipelagoManager::triggerAutosave()
 {
-    // TODO: Trigger game autosave
+    if (_game && _gameStarted)
+    {
+        // Save the current game state
+        SavedGame* save = _game->getSavedGame();
+        if (save)
+        {
+            saveGame(save);
+            // TODO: Trigger actual file save
+        }
+    }
 }
 
 /**
@@ -268,6 +312,23 @@ void ArchipelagoManager::initializeResearchMappings()
     _itemToResearchMap[APWorldConfig::ITEM_LASER_WEAPONS] = APWorldConfig::RESEARCH_LASER_WEAPONS;
     _itemToResearchMap[APWorldConfig::ITEM_MEDI_KIT] = APWorldConfig::RESEARCH_MEDI_KIT;
     _itemToResearchMap[APWorldConfig::ITEM_MOTION_SCANNER] = APWorldConfig::RESEARCH_MOTION_SCANNER;
+}
+
+/**
+ * Initialize location mappings for the current connection
+ */
+void ArchipelagoManager::initializeLocationMappings()
+{
+    // Create location objects for tracking
+    _checkedLocations.clear();
+    
+    APResearchLocation laserLoc(APWorldConfig::LOCATION_LASER_WEAPONS, "Laser Weapons Location", APWorldConfig::RESEARCH_LASER_WEAPONS);
+    APResearchLocation medikitLoc(APWorldConfig::LOCATION_MEDI_KIT, "Medi Kit Location", APWorldConfig::RESEARCH_MEDI_KIT);
+    APResearchLocation scannerLoc(APWorldConfig::LOCATION_MOTION_SCANNER, "Motion Scanner Location", APWorldConfig::RESEARCH_MOTION_SCANNER);
+    
+    _checkedLocations.push_back(laserLoc);
+    _checkedLocations.push_back(medikitLoc);
+    _checkedLocations.push_back(scannerLoc);
 }
 
 /**

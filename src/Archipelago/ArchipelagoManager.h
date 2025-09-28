@@ -115,6 +115,9 @@ private:
     /// Initialize research mappings
     void initializeResearchMappings();
     
+    /// Initialize location mappings for current connection
+    void initializeLocationMappings();
+    
     /// Callback for when items are cleared
     void onItemsClear();
     

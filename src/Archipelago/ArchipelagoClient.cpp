@@ -18,6 +18,9 @@
  */
 
 #include "ArchipelagoClient.h"
+#include "../APCpp/Archipelago.h"
+#include <iostream>
+#include <chrono>
 
 namespace OpenXcom
 {
@@ -52,10 +55,86 @@ ArchipelagoClient::~ArchipelagoClient()
  */
 bool ArchipelagoClient::initialize(const APConnectionInfo& connectionInfo)
 {
-    // TODO: Implement initialization
+    std::cout << "[AP] Initializing connection..." << std::endl;
+    std::cout << "[AP] Server URL: " << connectionInfo.serverUrl << std::endl;
+    std::cout << "[AP] Slot Name: " << connectionInfo.slotName << std::endl;
+    
+    APConnectionError error = validateConnection(connectionInfo);
+    if (error != AP_ERROR_NONE)
+    {
+        std::cout << "[AP] Validation failed: " << getErrorMessage(error) << std::endl;
+        return false;
+    }
+    
     _connectionInfo = connectionInfo;
-    _initialized = true;
-    return true;
+    
+    // Parse server URL to get host and port
+    std::string host;
+    int port;
+    if (!parseServerUrl(connectionInfo.serverUrl, host, port))
+    {
+        std::cout << "[AP] Failed to parse server URL" << std::endl;
+        return false;
+    }
+    
+    std::cout << "[AP] Parsed host: " << host << ", port: " << port << std::endl;
+    
+    try {
+        // Initialize APCpp library
+        std::string portStr = std::to_string(port);
+        // APCpp expects the server address in format "host:port", not separate parameters
+        std::string serverAddress = host + ":" + portStr;
+        std::cout << "[AP] Calling AP_Init with:" << std::endl;
+        std::cout << "[AP]   Server: '" << serverAddress << "'" << std::endl;
+        std::cout << "[AP]   Game: 'OpenXcom'" << std::endl;
+        std::cout << "[AP]   Slot: '" << connectionInfo.slotName << "'" << std::endl;
+        std::cout << "[AP]   Password: '" << (connectionInfo.password.empty() ? "(empty)" : "(provided)") << "'" << std::endl;
+        
+        // Set client version to latest (0.6.4)
+        AP_NetworkVersion version = {0, 6, 4};
+        AP_SetClientVersion(&version);
+        std::cout << "[AP] Set client version to 0.6.4" << std::endl;
+        
+        AP_Init(serverAddress.c_str(), "OpenXcom", connectionInfo.slotName.c_str(), connectionInfo.password.c_str());
+        std::cout << "[AP] AP_Init() completed" << std::endl;
+        
+        // Set up callbacks before starting
+        std::cout << "[AP] Setting up callbacks..." << std::endl;
+        AP_SetItemClearCallback([this]() { onItemClear(); });
+        AP_SetItemRecvCallback([this](int64_t itemId, bool notify) { onItemReceived(itemId, notify); });
+        AP_SetLocationCheckedCallback([this](int64_t locationId) { onLocationChecked(locationId); });
+        std::cout << "[AP] Callbacks set up successfully" << std::endl;
+        
+        // AP_Init only sets up parameters, we need to call AP_Start to actually initialize
+        std::cout << "[AP] Calling AP_Start()..." << std::endl;
+        AP_Start();
+        std::cout << "[AP] AP_Start() completed" << std::endl;
+        
+        // Now check if initialization was successful
+        _initialized = AP_IsInit();
+        std::cout << "[AP] AP_IsInit() returned: " << (_initialized ? "true" : "false") << std::endl;
+        
+        // Check initial connection status
+        AP_ConnectionStatus status = AP_GetConnectionStatus();
+        std::cout << "[AP] Initial connection status: " << static_cast<int>(status) << " (";
+        switch(status) {
+            case AP_ConnectionStatus::Disconnected: std::cout << "Disconnected"; break;
+            case AP_ConnectionStatus::Connected: std::cout << "Connected"; break;
+            case AP_ConnectionStatus::Authenticated: std::cout << "Authenticated"; break;
+            case AP_ConnectionStatus::ConnectionRefused: std::cout << "ConnectionRefused"; break;
+        }
+        std::cout << ")" << std::endl;
+        
+        return _initialized;
+    }
+    catch (const std::exception& e) {
+        std::cout << "[AP] Exception during initialization: " << e.what() << std::endl;
+        return false;
+    }
+    catch (...) {
+        std::cout << "[AP] Unknown exception during initialization" << std::endl;
+        return false;
+    }
 }
 
 /**
@@ -64,8 +143,54 @@ bool ArchipelagoClient::initialize(const APConnectionInfo& connectionInfo)
  */
 bool ArchipelagoClient::connect()
 {
-    // TODO: Implement connection
-    return false;
+    std::cout << "[AP] Starting connection..." << std::endl;
+    
+    if (!_initialized)
+    {
+        std::cout << "[AP] Not initialized, cannot connect" << std::endl;
+        return false;
+    }
+    
+    try {
+        // Start the connection
+        AP_Start();
+        std::cout << "[AP] AP_Start() called" << std::endl;
+        
+        // Wait briefly for connection to establish (websocket is asynchronous)
+        std::cout << "[AP] Waiting for connection to establish..." << std::endl;
+        for (int i = 0; i < 50; i++) { // Wait up to 5 seconds (50 * 100ms)
+            _connectionStatus = AP_GetConnectionStatus();
+            if (_connectionStatus != APConnectionStatus::Disconnected) {
+                break;
+            }
+            // Simple sleep equivalent - busy wait for 100ms
+            auto start = std::chrono::high_resolution_clock::now();
+            while (std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - start).count() < 100) {
+                // Busy wait
+            }
+        }
+        
+        // Update connection status
+        std::cout << "[AP] Final connection status: " << static_cast<int>(_connectionStatus) << " (";
+        switch(_connectionStatus) {
+            case APConnectionStatus::Disconnected: std::cout << "Disconnected"; break;
+            case APConnectionStatus::Connected: std::cout << "Connected"; break;
+            case APConnectionStatus::Authenticated: std::cout << "Authenticated"; break;
+            case APConnectionStatus::ConnectionRefused: std::cout << "ConnectionRefused"; break;
+        }
+        std::cout << ")" << std::endl;
+        
+        return _connectionStatus != APConnectionStatus::Disconnected;
+    }
+    catch (const std::exception& e) {
+        std::cout << "[AP] Exception during connection: " << e.what() << std::endl;
+        return false;
+    }
+    catch (...) {
+        std::cout << "[AP] Unknown exception during connection" << std::endl;
+        return false;
+    }
 }
 
 /**
@@ -73,8 +198,12 @@ bool ArchipelagoClient::connect()
  */
 void ArchipelagoClient::disconnect()
 {
-    // TODO: Implement disconnection
-    _connectionStatus = APConnectionStatus::Disconnected;
+    if (_initialized)
+    {
+        // APCpp doesn't have a specific disconnect function
+        // We need to shutdown and reinitialize if we want to reconnect
+        _connectionStatus = APConnectionStatus::Disconnected;
+    }
 }
 
 /**
@@ -82,9 +211,12 @@ void ArchipelagoClient::disconnect()
  */
 void ArchipelagoClient::shutdown()
 {
-    // TODO: Implement shutdown
-    _initialized = false;
-    _connectionStatus = APConnectionStatus::Disconnected;
+    if (_initialized)
+    {
+        AP_Shutdown();
+        _initialized = false;
+        _connectionStatus = APConnectionStatus::Disconnected;
+    }
 }
 
 /**
@@ -120,6 +252,10 @@ const APConnectionInfo& ArchipelagoClient::getConnectionInfo() const
  */
 int ArchipelagoClient::getPlayerId() const
 {
+    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
+    {
+        return AP_GetPlayerID();
+    }
     return _connectionInfo.playerId;
 }
 
@@ -129,7 +265,10 @@ int ArchipelagoClient::getPlayerId() const
  */
 void ArchipelagoClient::sendLocationCheck(int64_t locationId)
 {
-    // TODO: Implement location check sending
+    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
+    {
+        AP_SendItem(locationId);
+    }
 }
 
 /**
@@ -138,7 +277,10 @@ void ArchipelagoClient::sendLocationCheck(int64_t locationId)
  */
 void ArchipelagoClient::sendLocationChecks(const std::set<int64_t>& locationIds)
 {
-    // TODO: Implement multiple location checks
+    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
+    {
+        AP_SendItem(locationIds);
+    }
 }
 
 /**
@@ -146,7 +288,10 @@ void ArchipelagoClient::sendLocationChecks(const std::set<int64_t>& locationIds)
  */
 void ArchipelagoClient::sendStoryComplete()
 {
-    // TODO: Implement story completion
+    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
+    {
+        AP_StoryComplete();
+    }
 }
 
 /**
@@ -182,7 +327,10 @@ void ArchipelagoClient::setLocationCheckedCallback(std::function<void(int64_t)> 
  */
 bool ArchipelagoClient::isMessagePending() const
 {
-    // TODO: Implement message checking
+    if (_initialized)
+    {
+        return AP_IsMessagePending();
+    }
     return false;
 }
 
@@ -192,7 +340,10 @@ bool ArchipelagoClient::isMessagePending() const
  */
 AP_Message* ArchipelagoClient::getLatestMessage()
 {
-    // TODO: Implement message retrieval
+    if (_initialized)
+    {
+        return AP_GetLatestMessage();
+    }
     return nullptr;
 }
 
@@ -201,7 +352,10 @@ AP_Message* ArchipelagoClient::getLatestMessage()
  */
 void ArchipelagoClient::clearLatestMessage()
 {
-    // TODO: Implement message clearing
+    if (_initialized)
+    {
+        AP_ClearLatestMessage();
+    }
 }
 
 /**
@@ -210,7 +364,10 @@ void ArchipelagoClient::clearLatestMessage()
  */
 void ArchipelagoClient::sendMessage(const std::string& message)
 {
-    // TODO: Implement message sending
+    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
+    {
+        AP_Say(message);
+    }
 }
 
 /**
@@ -218,7 +375,17 @@ void ArchipelagoClient::sendMessage(const std::string& message)
  */
 void ArchipelagoClient::update()
 {
-    // TODO: Implement client update
+    if (_initialized)
+    {
+        // Update connection status
+        _connectionStatus = AP_GetConnectionStatus();
+        
+        // Update player ID if authenticated
+        if (_connectionStatus == APConnectionStatus::Authenticated)
+        {
+            _connectionInfo.playerId = AP_GetPlayerID();
+        }
+    }
 }
 
 /**
@@ -297,10 +464,30 @@ APConnectionError ArchipelagoClient::validateConnection(const APConnectionInfo& 
  */
 bool ArchipelagoClient::parseServerUrl(const std::string& url, std::string& host, int& port) const
 {
-    // TODO: Implement URL parsing
-    host = url;
-    port = 38281; // Default Archipelago port
-    return true;
+    size_t colonPos = url.find(':');
+    if (colonPos != std::string::npos)
+    {
+        host = url.substr(0, colonPos);
+        std::string portStr = url.substr(colonPos + 1);
+        try
+        {
+            port = std::stoi(portStr);
+            std::cout << "[AP] URL parsing - Host: '" << host << "', Port: " << port << std::endl;
+            return port > 0 && port <= 65535;
+        }
+        catch (...)
+        {
+            std::cout << "[AP] Failed to parse port from: " << portStr << std::endl;
+            return false;
+        }
+    }
+    else
+    {
+        host = url;
+        port = 38281; // Default Archipelago port
+        std::cout << "[AP] No port specified, using default - Host: '" << host << "', Port: " << port << std::endl;
+        return true;
+    }
 }
 
 }

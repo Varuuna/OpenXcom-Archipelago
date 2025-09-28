@@ -204,7 +204,6 @@ void ArchipelagoConnectState::think()
 void ArchipelagoConnectState::init()
 {
     State::init();
-    _edtServerUrl->setFocus(true);
 }
 
 /**

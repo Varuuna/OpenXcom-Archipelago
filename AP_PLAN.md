@@ -32,15 +32,15 @@ src/
 **Goal**: Establish basic Archipelago connectivity and UI
 
 #### 1.1 Create Archipelago Directory Structure
-- [ ] Create `src/Archipelago/` directory
-- [ ] Add Archipelago source files to CMakeLists.txt
-- [ ] Set up proper include paths
+- [x] Create `src/Archipelago/` directory
+- [x] Add Archipelago source files to CMakeLists.txt
+- [x] Set up proper include paths
 
 #### 1.2 Implement ArchipelagoConnectState
-- [ ] Create connection UI with server URL, slot name, password fields
-- [ ] Add connection status display and error handling
-- [ ] Implement connection flow that leads to difficulty selection
-- [ ] Handle connection validation and user feedback
+- [x] Create connection UI with server URL, slot name, password fields
+- [x] Add connection status display and error handling
+- [x] Implement connection flow that leads to difficulty selection
+- [x] Handle connection validation and user feedback
 
 #### 1.3 Create Core Data Structures (ArchipelagoTypes.h)
 ```cpp
@@ -73,11 +73,11 @@ struct APResearchLocation {
 **Goal**: Wrap APCpp library with game-specific functionality
 
 #### 2.1 Implement ArchipelagoClient
-- [ ] Create wrapper around APCpp library functions
-- [ ] Implement connection management (connect, disconnect, reconnect)
-- [ ] Set up callback handlers for items and location checks
-- [ ] Handle network events and status updates
-- [ ] Implement error handling and logging
+- [x] Create wrapper around APCpp library functions
+- [x] Implement connection management (connect, disconnect, reconnect)
+- [x] Set up callback handlers for items and location checks
+- [x] Handle network events and status updates
+- [x] Implement error handling and logging
 
 #### 2.2 Create ArchipelagoManager
 - [ ] High-level interface for game systems
@@ -111,9 +111,9 @@ struct APResearchLocation {
 - [ ] Manage reconnection on game load
 
 #### 3.4 Update Build System
-- [ ] Add Archipelago source files to CMakeLists.txt
-- [ ] Update source file lists with new modules
-- [ ] Ensure proper compilation order and dependencies
+- [x] Add Archipelago source files to CMakeLists.txt
+- [x] Update source file lists with new modules
+- [x] Ensure proper compilation order and dependencies
 
 ### Phase 4: Advanced Features
 **Goal**: Polish and enhance the integration
