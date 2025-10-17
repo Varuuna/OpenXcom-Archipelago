@@ -80,9 +80,6 @@ public:
     /// Send multiple location checks to server
     void sendLocationChecks(const std::set<int64_t>& locationIds);
     
-    /// Send story completion status
-    void sendStoryComplete();
-    
     /// Set callback for when items need to be cleared
     void setItemClearCallback(std::function<void()> callback);
     
@@ -103,9 +100,6 @@ public:
     
     /// Clear the latest message
     void clearLatestMessage();
-    
-    /// Send a chat message
-    void sendMessage(const std::string& message);
     
     /// Update the client (should be called regularly)
     void update();

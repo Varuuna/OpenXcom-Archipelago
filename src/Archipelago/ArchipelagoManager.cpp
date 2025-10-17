@@ -18,7 +18,6 @@
  */
 
 #include "ArchipelagoManager.h"
-#include "ItemMappings.h"
 #include "../Engine/Game.h"
 #include "../Geoscape/GeoscapeState.h"
 #include "../Mod/Mod.h"
@@ -26,6 +25,7 @@
 #include "../Savegame/Base.h"
 #include "../Savegame/ResearchProject.h"
 #include "../Savegame/SavedGame.h"
+#include "ItemMappings.h"
 #include <iostream>
 
 namespace OpenXcom
@@ -244,25 +244,7 @@ void ArchipelagoManager::onResearchCompleted(const std::string &researchName)
 			_checkedLocations.push_back(location);
 		}
 
-		// Show notification for sent item using location data
-		if (_geoscapeState)
-		{
-			auto locationDataIt = _locationData.find(locationId);
-			if (locationDataIt != _locationData.end())
-			{
-				const AP_NetworkItem &item = locationDataIt->second;
-				std::string notificationText = "Sent " + item.itemName + " to " + item.playerName;
-				_geoscapeState->addAPNotification(notificationText, 133); // Green color for sent items
-				std::cout << "[AP] Notification: " << notificationText << std::endl;
-			}
-			else
-			{
-				// Fallback if location data not available
-				std::string notificationText = "Sent item for " + researchName;
-				_geoscapeState->addAPNotification(notificationText, 133);
-				std::cout << "[AP] Notification (fallback): " << notificationText << std::endl;
-			}
-		}
+		std::cout << "[AP] Notification: Sent item for " << researchName << std::endl;
 
 		triggerAutosave();
 	}
@@ -289,7 +271,7 @@ bool ArchipelagoManager::isResearchUnlocked(const std::string &researchName) con
  * Get list of received research items
  * @return vector of received items
  */
-const std::vector<APResearchItem> &ArchipelagoManager::getReceivedItems() const
+const std::vector<APItem> &ArchipelagoManager::getReceivedItems() const
 {
 	return _receivedItems;
 }
@@ -317,7 +299,6 @@ void ArchipelagoManager::update()
 		// Scout locations once we're authenticated and haven't done it yet
 		if (!_locationsScouted && isConnected())
 		{
-			std::cout << "[AP] Now authenticated, scouting locations..." << std::endl;
 			std::cout << "[AP] Game started: " << (_gameStarted ? "true" : "false") << std::endl;
 
 			// If game was started but we weren't authenticated yet, mark it as started now
@@ -332,9 +313,6 @@ void ArchipelagoManager::update()
 			createDynamicResearchProjects();
 			_locationsScouted = true;
 		}
-
-		// AP research names are now available for use in research screens
-		// No need to automatically add research projects - let the player choose them
 	}
 	else
 	{
@@ -377,8 +355,8 @@ void ArchipelagoManager::triggerAutosave()
 void ArchipelagoManager::initializeItemMappings()
 {
 	// Load mappings from the ItemMappings class
-	ItemMappings::getResearchToLocationMap(_researchToLocationMap);
-	ItemMappings::getItemToResearchMap(_itemToResearchMap);
+	ItemMappings::getItemToLocationMap(_itemToLocationMap);
+	ItemMappings::getReceivedItemMap(_receivedItemMap);
 }
 
 /**
@@ -386,16 +364,16 @@ void ArchipelagoManager::initializeItemMappings()
  */
 void ArchipelagoManager::initializeLocationMappings()
 {
-	// Create location objects for tracking all 70 research locations
+	// Create location objects for tracking all locations
 	_checkedLocations.clear();
 
-	// Initialize all locations from the research to location map
-	for (const auto &pair : _researchToLocationMap)
+	// Initialize all locations from the item to location map
+	for (const auto &pair : _itemToLocationMap)
 	{
-		const std::string &researchName = pair.first;
+		const std::string &itemName = pair.first;
 		int64_t locationId = pair.second;
 
-		APResearchLocation location(locationId, researchName + " Location", researchName);
+		APResearchLocation location(locationId, itemName + " Location", itemName);
 		_checkedLocations.push_back(location);
 	}
 
@@ -436,21 +414,22 @@ void ArchipelagoManager::onItemReceived(int64_t itemId, bool notify)
 		_client->clearLatestMessage();
 	}
 
-	// Check if this is a research item
-	std::string researchName = getResearchFromItemId(itemId);
-	if (!researchName.empty())
+	const APItemInfo *apItem = getItemById(itemId);
+	if (apItem)
 	{
 		// Add to received items
-		APResearchItem item(itemId, researchName);
+		APItem item(itemId, apItem->name);
 		item.received = true;
 		_receivedItems.push_back(item);
 
-		std::cout << "[AP] Research item received: " << researchName << std::endl;
+		std::cout << "[AP] Research item received: " << item.itemName << std::endl;
 
-		// Unlock research immediately
-		unlockResearch(researchName);
+		if (apItem->type == APItemType::Research)
+		{
+			// Unlock research immediately
+			unlockResearch(item.itemName);
+		}
 	}
-
 	// Always trigger autosave when receiving any item
 	triggerAutosave();
 }
@@ -533,8 +512,27 @@ void ArchipelagoManager::unlockResearch(const std::string &researchName)
  */
 std::string ArchipelagoManager::getResearchFromItemId(int64_t itemId) const
 {
-	auto it = _itemToResearchMap.find(itemId);
-	return (it != _itemToResearchMap.end()) ? it->second : "";
+	auto it = _receivedItemMap.find(itemId);
+	if (it != _receivedItemMap.end() && it->second.type == APItemType::Research)
+	{
+		return it->second.name;
+	}
+	return "";
+}
+
+/**
+ * Get item info from item ID
+ * @param itemId Item ID
+ * @return pointer to item info or nullptr if not found
+ */
+const APItemInfo *ArchipelagoManager::getItemById(int64_t itemId) const
+{
+	auto it = _receivedItemMap.find(itemId);
+	if (it != _receivedItemMap.end())
+	{
+		return &it->second;
+	}
+	return nullptr;
 }
 
 /**
@@ -542,10 +540,10 @@ std::string ArchipelagoManager::getResearchFromItemId(int64_t itemId) const
  * @param researchName Research name
  * @return location ID
  */
-int64_t ArchipelagoManager::getLocationFromResearch(const std::string &researchName) const
+int64_t ArchipelagoManager::getLocationFromResearch(const std::string &itemName) const
 {
-	auto it = _researchToLocationMap.find(researchName);
-	return (it != _researchToLocationMap.end()) ? it->second : 0;
+	auto it = _itemToLocationMap.find(itemName);
+	return (it != _itemToLocationMap.end()) ? it->second : 0;
 }
 
 /**
@@ -585,8 +583,8 @@ bool ArchipelagoManager::isAPResearch(const std::string &researchName) const
  */
 bool ArchipelagoManager::shouldSkipResearchUnlock(const std::string &researchName) const
 {
-	// Skip automatic unlocking if this research is mapped to an AP location
-	return isConnected() && (_researchToLocationMap.find(researchName) != _researchToLocationMap.end());
+	// Skip automatic unlocking if this item is mapped to an AP location
+	return isConnected() && (_itemToLocationMap.find(researchName) != _itemToLocationMap.end());
 }
 
 /**
@@ -619,8 +617,8 @@ void ArchipelagoManager::createDynamicResearchProjects()
 		return;
 	}
 
-	std::cout << "[AP] Dynamic research projects initialized - using original research names" << std::endl;
-	std::cout << "[AP] Research to location map size: " << _researchToLocationMap.size() << std::endl;
+	std::cout << "[AP] Dynamic research projects initialized - using original item names" << std::endl;
+	std::cout << "[AP] Item to location map size: " << _itemToLocationMap.size() << std::endl;
 
 	// Clear any existing AP research names - we're using original names
 	_apResearchNames.clear();
@@ -628,21 +626,6 @@ void ArchipelagoManager::createDynamicResearchProjects()
 	std::cout << "[AP] Research projects will use original OpenXcom names" << std::endl;
 }
 
-/**
- * Get list of AP research projects to be created
- * @return vector of pairs (original_name, ap_display_name)
- */
-std::vector<std::pair<std::string, std::string> > ArchipelagoManager::getAPResearchProjects() const
-{
-	std::vector<std::pair<std::string, std::string> > projects;
-
-	for (const auto &pair : _apResearchNames)
-	{
-		projects.push_back({pair.first, pair.second});
-	}
-
-	return projects;
-}
 
 /**
  * Callback for when location info is received
@@ -666,28 +649,28 @@ void ArchipelagoManager::onLocationInfoReceived(const std::vector<AP_NetworkItem
 
 		_locationData[item.location] = item;
 
-		// Find the research name that corresponds to this location
-		std::string researchName;
-		for (const auto &pair : _researchToLocationMap)
+		// Find the item name that corresponds to this location
+		std::string itemName;
+		for (const auto &pair : _itemToLocationMap)
 		{
 			if (pair.second == item.location)
 			{
-				researchName = pair.first;
+				itemName = pair.first;
 				break;
 			}
 		}
 
-		if (!researchName.empty())
+		if (!itemName.empty())
 		{
 			// Create AP display name: "ItemName (PlayerName)"
 			std::string apDisplayName = item.itemName + " (" + item.playerName + ")";
-			_apResearchNames[researchName] = apDisplayName;
+			_apResearchNames[itemName] = apDisplayName;
 
-			std::cout << "[AP] Mapped research '" << researchName << "' -> '" << apDisplayName << "'" << std::endl;
+			std::cout << "[AP] Mapped item '" << itemName << "' -> '" << apDisplayName << "'" << std::endl;
 		}
 		else
 		{
-			std::cout << "[AP] No research mapping found for location " << item.location << std::endl;
+			std::cout << "[AP] No item mapping found for location " << item.location << std::endl;
 		}
 	}
 
@@ -739,7 +722,7 @@ void ArchipelagoManager::addAPResearchProjectsToBase(Base *base)
 	std::cout << "[AP] Base currently has " << base->getResearch().size() << " research projects" << std::endl;
 
 	// Add research projects for each AP location
-	for (const auto &pair : _researchToLocationMap)
+	for (const auto &pair : _itemToLocationMap)
 	{
 		const std::string &researchName = pair.first;
 

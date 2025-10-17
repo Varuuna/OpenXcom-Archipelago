@@ -286,17 +286,6 @@ void ArchipelagoClient::sendLocationChecks(const std::set<int64_t>& locationIds)
 }
 
 /**
- * Send story completion status
- */
-void ArchipelagoClient::sendStoryComplete()
-{
-    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
-    {
-        AP_StoryComplete();
-    }
-}
-
-/**
  * Set callback for when items need to be cleared
  * @param callback Callback function
  */
@@ -363,22 +352,10 @@ AP_Message* ArchipelagoClient::getLatestMessage()
  */
 void ArchipelagoClient::clearLatestMessage()
 {
-    if (_initialized)
-    {
-        AP_ClearLatestMessage();
-    }
-}
-
-/**
- * Send a chat message
- * @param message Message to send
- */
-void ArchipelagoClient::sendMessage(const std::string& message)
-{
-    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
-    {
-        AP_Say(message);
-    }
+	if (_initialized)
+	{
+		AP_ClearLatestMessage();
+	}
 }
 
 /**

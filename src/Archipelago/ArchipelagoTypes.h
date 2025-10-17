@@ -44,13 +44,13 @@ struct APConnectionInfo {
 /**
  * Structure representing a research item received from Archipelago
  */
-struct APResearchItem {
+struct APItem {
     int64_t itemId;
     std::string itemName;
     bool received;
     
-    APResearchItem() : itemId(0), received(false) {}
-    APResearchItem(int64_t id, const std::string& name) 
+    APItem() : itemId(0), received(false) {}
+    APItem(int64_t id, const std::string& name) 
         : itemId(id), itemName(name), received(false) {}
 };
 

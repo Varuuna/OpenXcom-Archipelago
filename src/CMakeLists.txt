@@ -347,7 +347,7 @@ set ( ufopedia_src
 set ( archipelago_src
   Archipelago/ArchipelagoClient.cpp
   Archipelago/ArchipelagoManager.cpp
-  Archipelago/ResearchLocationMapper.cpp
+  Archipelago/ItemMappings.cpp
 )
 
 # NOTE: to build with clang *and* libc++ on Linux, you need to call cmake like so:
