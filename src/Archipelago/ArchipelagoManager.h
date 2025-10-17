@@ -99,9 +99,6 @@ public:
     /// Load game with Archipelago state
     void loadGame(SavedGame* save);
     
-    /// Save Archipelago state to save game
-    void saveGame(SavedGame* save);
-    
     /// Handle research completion - send location check
     void onResearchCompleted(const std::string& researchName);
     

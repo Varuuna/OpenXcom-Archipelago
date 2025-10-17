@@ -559,6 +559,37 @@ if ( WIN32 )
   install ( FILES ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.dll DESTINATION bin)
 endif ()
 
+# Copy built executable and dependencies to root Publish directory
+add_custom_command(TARGET openxcom POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/Publish"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:openxcom>" "${CMAKE_SOURCE_DIR}/Publish/"
+    COMMENT "Publishing OpenXcom build to ${CMAKE_SOURCE_DIR}/Publish/"
+)
+
+# Copy data directories to Publish folder
+foreach ( binpath ${bin_data_dirs} )
+    add_custom_command ( TARGET openxcom
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/bin/${binpath} ${CMAKE_SOURCE_DIR}/Publish/${binpath}
+      VERBATIM )
+endforeach()
+
+# Copy Windows DLLs to Publish folder
+if ( WIN32 )
+  foreach ( dll ${Windows_dll} )
+    add_custom_command ( TARGET openxcom
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${dll} ${CMAKE_SOURCE_DIR}/Publish/
+      VERBATIM )
+  endforeach()
+  
+  # Copy APCpp DLL to Publish folder
+  add_custom_command ( TARGET openxcom
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.dll ${CMAKE_SOURCE_DIR}/Publish/
+    VERBATIM )
+endif ()
+
 #Setup source groups for IDE
 if ( MSVC OR "${CMAKE_GENERATOR}" STREQUAL "Xcode" )
   source_group ( "Basescape" FILES ${basescape_src} )

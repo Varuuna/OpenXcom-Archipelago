@@ -95,9 +95,6 @@ public:
     /// Set callback for when location info is received
     void setLocationInfoCallback(std::function<void(std::vector<AP_NetworkItem>)> callback);
     
-    /// Send location scouts to get item information
-    void sendLocationScouts(const std::set<int64_t>& locationIds, int createAsHint = 0);
-    
     /// Check if there are pending messages
     bool isMessagePending() const;
     

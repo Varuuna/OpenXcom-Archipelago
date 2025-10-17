@@ -208,19 +208,6 @@ void ArchipelagoManager::loadGame(SavedGame* save)
 }
 
 /**
- * Save Archipelago state to save game
- * @param save Save game
- */
-void ArchipelagoManager::saveGame(SavedGame* save)
-{
-    if (!save)
-        return;
-    
-    // TODO: Save AP state to save game YAML
-    // This will be implemented in Phase 3.3
-}
-
-/**
  * Handle research completion - send location check
  * @param researchName Name of completed research
  */
@@ -365,12 +352,20 @@ void ArchipelagoManager::triggerAutosave()
 {
     if (_game && _gameStarted)
     {
-        // Save the current game state
         SavedGame* save = _game->getSavedGame();
         if (save)
         {
-            saveGame(save);
-            // TODO: Trigger actual file save
+            try
+            {
+                // Use the geoscape autosave filename
+                std::string filename = SavedGame::AUTOSAVE_GEOSCAPE;
+                save->save(filename);
+                std::cout << "[AP] Autosave triggered: " << filename << std::endl;
+            }
+            catch (const std::exception& e)
+            {
+                std::cout << "[AP] Autosave failed: " << e.what() << std::endl;
+            }
         }
     }
 }
@@ -380,15 +375,115 @@ void ArchipelagoManager::triggerAutosave()
  */
 void ArchipelagoManager::initializeResearchMappings()
 {
-    // Map research names to location IDs
-    _researchToLocationMap[APWorldConfig::RESEARCH_LASER_WEAPONS] = APWorldConfig::LOCATION_LASER_WEAPONS;
-    _researchToLocationMap[APWorldConfig::RESEARCH_MEDI_KIT] = APWorldConfig::LOCATION_MEDI_KIT;
-    _researchToLocationMap[APWorldConfig::RESEARCH_MOTION_SCANNER] = APWorldConfig::LOCATION_MOTION_SCANNER;
+    // Map research names to location IDs (using OpenXcom internal research IDs)
+    _researchToLocationMap["STR_ALIEN_ALLOYS"] = APWorldConfig::LOCATION_ALIEN_ALLOYS;
+    _researchToLocationMap["STR_ALIEN_ENTERTAINMENT"] = APWorldConfig::LOCATION_ALIEN_ENTERTAINMENT;
+    _researchToLocationMap["STR_ALIEN_FOOD"] = APWorldConfig::LOCATION_ALIEN_FOOD;
+    _researchToLocationMap["STR_ALIEN_GRENADE"] = APWorldConfig::LOCATION_ALIEN_GRENADE;
+    _researchToLocationMap["STR_ALIEN_ORIGINS"] = APWorldConfig::LOCATION_ALIEN_ORIGINS;
+    _researchToLocationMap["STR_ALIEN_SURGERY"] = APWorldConfig::LOCATION_ALIEN_SURGERY;
+    _researchToLocationMap["STR_BLASTER_BOMB"] = APWorldConfig::LOCATION_BLASTER_BOMB;
+    _researchToLocationMap["STR_BLASTER_LAUNCHER"] = APWorldConfig::LOCATION_BLASTER_LAUNCHER;
+    _researchToLocationMap["STR_CELATID_CORPSE"] = APWorldConfig::LOCATION_CELATID_CORPSE;
+    _researchToLocationMap["STR_CELATID_TERRORIST"] = APWorldConfig::LOCATION_CELATID_TERRORIST;
+    _researchToLocationMap["STR_CHRYSSALID_CORPSE"] = APWorldConfig::LOCATION_CHRYSSALID_CORPSE;
+    _researchToLocationMap["STR_CHRYSSALID_TERRORIST"] = APWorldConfig::LOCATION_CHRYSSALID_TERRORIST;
+    _researchToLocationMap["STR_CYBERDISC_CORPSE"] = APWorldConfig::LOCATION_CYBERDISC_CORPSE;
+    _researchToLocationMap["STR_CYDONIA_OR_BUST"] = APWorldConfig::LOCATION_CYDONIA_OR_BUST;
+    _researchToLocationMap["STR_ELERIUM_115"] = APWorldConfig::LOCATION_ELERIUM_115;
+    _researchToLocationMap["STR_ETHEREAL"] = APWorldConfig::LOCATION_ETHEREAL;
+    _researchToLocationMap["STR_EXAMINATION_ROOM"] = APWorldConfig::LOCATION_EXAMINATION_ROOM;
+    _researchToLocationMap["STR_FLOATER"] = APWorldConfig::LOCATION_FLOATER;
+    _researchToLocationMap["STR_FLOATER_CORPSE"] = APWorldConfig::LOCATION_FLOATER_CORPSE;
+    _researchToLocationMap["STR_FLYING_SUIT"] = APWorldConfig::LOCATION_FLYING_SUIT;
+    _researchToLocationMap["STR_FUSION_BALL"] = APWorldConfig::LOCATION_FUSION_BALL;
+    _researchToLocationMap["STR_FUSION_BALL_LAUNCHER"] = APWorldConfig::LOCATION_FUSION_BALL_LAUNCHER;
+    _researchToLocationMap["STR_FUSION_DEFENSE"] = APWorldConfig::LOCATION_FUSION_DEFENCES;
+    _researchToLocationMap["STR_GRAV_SHIELD"] = APWorldConfig::LOCATION_GRAV_SHIELD;
+    _researchToLocationMap["STR_HEAVY_LASER"] = APWorldConfig::LOCATION_HEAVY_LASER;
+    _researchToLocationMap["STR_HEAVY_PLASMA"] = APWorldConfig::LOCATION_HEAVY_PLASMA;
+    _researchToLocationMap["STR_HEAVY_PLASMA_CLIP"] = APWorldConfig::LOCATION_HEAVY_PLASMA_CLIP;
+    _researchToLocationMap["STR_HOVERTANK_LAUNCHER"] = APWorldConfig::LOCATION_HOVERTANK_LAUNCHER;
+    _researchToLocationMap["STR_HOVERTANK_PLASMA"] = APWorldConfig::LOCATION_HOVERTANK_PLASMA;
+    _researchToLocationMap["STR_HYPER_WAVE_DECODER"] = APWorldConfig::LOCATION_HYPER_WAVE_DECODER;
+    _researchToLocationMap["STR_LASER_CANNON"] = APWorldConfig::LOCATION_LASER_CANNON;
+    _researchToLocationMap["STR_LASER_DEFENSE"] = APWorldConfig::LOCATION_LASER_DEFENCES;
+    _researchToLocationMap["STR_LASER_PISTOL"] = APWorldConfig::LOCATION_LASER_PISTOL;
+    _researchToLocationMap["STR_LASER_RIFLE"] = APWorldConfig::LOCATION_LASER_RIFLE;
+    _researchToLocationMap["STR_LASER_WEAPONS"] = APWorldConfig::LOCATION_LASER_WEAPONS;
+    _researchToLocationMap["STR_MEDI_KIT"] = APWorldConfig::LOCATION_MEDI_KIT;
+    _researchToLocationMap["STR_MIND_PROBE"] = APWorldConfig::LOCATION_MIND_PROBE;
+    _researchToLocationMap["STR_MIND_SHIELD"] = APWorldConfig::LOCATION_MIND_SHIELD;
+    _researchToLocationMap["STR_MOTION_SCANNER"] = APWorldConfig::LOCATION_MOTION_SCANNER;
+    _researchToLocationMap["STR_MUTON"] = APWorldConfig::LOCATION_MUTON;
+    _researchToLocationMap["STR_MUTON_CORPSE"] = APWorldConfig::LOCATION_MUTON_CORPSE;
+    _researchToLocationMap["STR_NEW_FIGHTER_CRAFT"] = APWorldConfig::LOCATION_NEW_FIGHTER_CRAFT;
+    _researchToLocationMap["STR_NEW_FIGHTER_TRANSPORTER"] = APWorldConfig::LOCATION_NEW_FIGHTER_TRANSPORTER;
+    _researchToLocationMap["STR_PERSONAL_ARMOR"] = APWorldConfig::LOCATION_PERSONAL_ARMOR;
+    _researchToLocationMap["STR_PLASMA_CANNON"] = APWorldConfig::LOCATION_PLASMA_CANNON;
+    _researchToLocationMap["STR_PLASMA_DEFENSE"] = APWorldConfig::LOCATION_PLASMA_DEFENCES;
+    _researchToLocationMap["STR_PLASMA_PISTOL"] = APWorldConfig::LOCATION_PLASMA_PISTOL;
+    _researchToLocationMap["STR_PLASMA_PISTOL_CLIP"] = APWorldConfig::LOCATION_PLASMA_PISTOL_CLIP;
+    _researchToLocationMap["STR_PLASMA_RIFLE"] = APWorldConfig::LOCATION_PLASMA_RIFLE;
+    _researchToLocationMap["STR_PLASMA_RIFLE_CLIP"] = APWorldConfig::LOCATION_PLASMA_RIFLE_CLIP;
+    _researchToLocationMap["STR_POWER_SUIT"] = APWorldConfig::LOCATION_POWER_SUIT;
+    _researchToLocationMap["STR_PSI_LAB"] = APWorldConfig::LOCATION_PSI_LAB;
+    _researchToLocationMap["STR_PSI_AMP"] = APWorldConfig::LOCATION_PSI_AMP;
+    _researchToLocationMap["STR_REAPER_CORPSE"] = APWorldConfig::LOCATION_REAPER_CORPSE;
+    _researchToLocationMap["STR_REAPER_TERRORIST"] = APWorldConfig::LOCATION_REAPER_TERRORIST;
+    _researchToLocationMap["STR_SECTOID"] = APWorldConfig::LOCATION_SECTOID;
+    _researchToLocationMap["STR_SECTOID_CORPSE"] = APWorldConfig::LOCATION_SECTOID_CORPSE;
+    _researchToLocationMap["STR_SECTOPOD_CORPSE"] = APWorldConfig::LOCATION_SECTOPOD_CORPSE;
+    _researchToLocationMap["STR_SILACOID_CORPSE"] = APWorldConfig::LOCATION_SILACOID_CORPSE;
+    _researchToLocationMap["STR_SILACOID_TERRORIST"] = APWorldConfig::LOCATION_SILACOID_TERRORIST;
+    _researchToLocationMap["STR_SMALL_LAUNCHER"] = APWorldConfig::LOCATION_SMALL_LAUNCHER;
+    _researchToLocationMap["STR_SNAKEMAN"] = APWorldConfig::LOCATION_SNAKEMAN;
+    _researchToLocationMap["STR_SNAKEMAN_CORPSE"] = APWorldConfig::LOCATION_SNAKEMAN_CORPSE;
+    _researchToLocationMap["STR_STUN_BOMB"] = APWorldConfig::LOCATION_STUN_BOMB;
+    _researchToLocationMap["STR_TANK_LASER_CANNON"] = APWorldConfig::LOCATION_TANK_LASER_CANNON;
+    _researchToLocationMap["STR_THE_MARTIAN_SOLUTION"] = APWorldConfig::LOCATION_THE_MARTIAN_SOLUTION;
+    _researchToLocationMap["STR_UFO_CONSTRUCTION"] = APWorldConfig::LOCATION_UFO_CONSTRUCTION;
+    _researchToLocationMap["STR_UFO_NAVIGATION"] = APWorldConfig::LOCATION_UFO_NAVIGATION;
+    _researchToLocationMap["STR_UFO_POWER_SOURCE"] = APWorldConfig::LOCATION_UFO_POWER_SOURCE;
+    _researchToLocationMap["STR_ULTIMATE_CRAFT"] = APWorldConfig::LOCATION_ULTIMATE_CRAFT;
     
-    // Map item IDs to research names
-    _itemToResearchMap[APWorldConfig::ITEM_LASER_WEAPONS] = APWorldConfig::RESEARCH_LASER_WEAPONS;
-    _itemToResearchMap[APWorldConfig::ITEM_MEDI_KIT] = APWorldConfig::RESEARCH_MEDI_KIT;
-    _itemToResearchMap[APWorldConfig::ITEM_MOTION_SCANNER] = APWorldConfig::RESEARCH_MOTION_SCANNER;
+    // Map item IDs to research names (only for items that unlock research)
+    _itemToResearchMap[APWorldConfig::ITEM_ALIEN_GRENADE] = "STR_ALIEN_GRENADE";
+    _itemToResearchMap[APWorldConfig::ITEM_BLASTER_BOMB] = "STR_BLASTER_BOMB";
+    _itemToResearchMap[APWorldConfig::ITEM_BLASTER_LAUNCHER] = "STR_BLASTER_LAUNCHER";
+    _itemToResearchMap[APWorldConfig::ITEM_ELERIUM_115] = "STR_ELERIUM_115";
+    _itemToResearchMap[APWorldConfig::ITEM_FLYING_SUIT] = "STR_FLYING_SUIT";
+    _itemToResearchMap[APWorldConfig::ITEM_FUSION_BALL] = "STR_FUSION_BALL";
+    _itemToResearchMap[APWorldConfig::ITEM_FUSION_BALL_LAUNCHER] = "STR_FUSION_BALL_LAUNCHER";
+    _itemToResearchMap[APWorldConfig::ITEM_FUSION_BALL_DEFENCES] = "STR_FUSION_DEFENSE";
+    _itemToResearchMap[APWorldConfig::ITEM_GRAV_SHIELD] = "STR_GRAV_SHIELD";
+    _itemToResearchMap[APWorldConfig::ITEM_HEAVY_LASER] = "STR_HEAVY_LASER";
+    _itemToResearchMap[APWorldConfig::ITEM_HEAVY_PLASMA] = "STR_HEAVY_PLASMA";
+    _itemToResearchMap[APWorldConfig::ITEM_HEAVY_PLASMA_CLIP] = "STR_HEAVY_PLASMA_CLIP";
+    _itemToResearchMap[APWorldConfig::ITEM_HOVERTANK_LAUNCHER] = "STR_HOVERTANK_LAUNCHER";
+    _itemToResearchMap[APWorldConfig::ITEM_HOVERTANK_PLASMA] = "STR_HOVERTANK_PLASMA";
+    _itemToResearchMap[APWorldConfig::ITEM_HYPER_WAVE_DECODER] = "STR_HYPER_WAVE_DECODER";
+    _itemToResearchMap[APWorldConfig::ITEM_LASER_CANNON] = "STR_LASER_CANNON";
+    _itemToResearchMap[APWorldConfig::ITEM_LASER_DEFENCES] = "STR_LASER_DEFENSE";
+    _itemToResearchMap[APWorldConfig::ITEM_LASER_PISTOL] = "STR_LASER_PISTOL";
+    _itemToResearchMap[APWorldConfig::ITEM_LASER_RIFLE] = "STR_LASER_RIFLE";
+    _itemToResearchMap[APWorldConfig::ITEM_MEDI_KIT] = "STR_MEDI_KIT";
+    _itemToResearchMap[APWorldConfig::ITEM_MIND_PROBE] = "STR_MIND_PROBE";
+    _itemToResearchMap[APWorldConfig::ITEM_MIND_SHIELD] = "STR_MIND_SHIELD";
+    _itemToResearchMap[APWorldConfig::ITEM_MOTION_SCANNER] = "STR_MOTION_SCANNER";
+    _itemToResearchMap[APWorldConfig::ITEM_FIRESTORM] = "STR_NEW_FIGHTER_CRAFT";
+    _itemToResearchMap[APWorldConfig::ITEM_LIGHTNING] = "STR_NEW_FIGHTER_TRANSPORTER";
+    _itemToResearchMap[APWorldConfig::ITEM_PERSONAL_ARMOR] = "STR_PERSONAL_ARMOR";
+    _itemToResearchMap[APWorldConfig::ITEM_PLASMA_BEAM] = "STR_PLASMA_CANNON";
+    _itemToResearchMap[APWorldConfig::ITEM_PLASMA_DEFENCES] = "STR_PLASMA_DEFENSE";
+    _itemToResearchMap[APWorldConfig::ITEM_PLASMA_PISTOL] = "STR_PLASMA_PISTOL";
+    _itemToResearchMap[APWorldConfig::ITEM_PLASMA_PISTOL_CLIP] = "STR_PLASMA_PISTOL_CLIP";
+    _itemToResearchMap[APWorldConfig::ITEM_PLASMA_RIFLE] = "STR_PLASMA_RIFLE";
+    _itemToResearchMap[APWorldConfig::ITEM_PLASMA_RIFLE_CLIP] = "STR_PLASMA_RIFLE_CLIP";
+    _itemToResearchMap[APWorldConfig::ITEM_POWER_SUIT] = "STR_POWER_SUIT";
+    _itemToResearchMap[APWorldConfig::ITEM_PSI_AMP] = "STR_PSI_AMP";
+    _itemToResearchMap[APWorldConfig::ITEM_SMALL_LAUNCHER] = "STR_SMALL_LAUNCHER";
+    _itemToResearchMap[APWorldConfig::ITEM_AVENGER] = "STR_ULTIMATE_CRAFT";
 }
 
 /**
@@ -396,16 +491,20 @@ void ArchipelagoManager::initializeResearchMappings()
  */
 void ArchipelagoManager::initializeLocationMappings()
 {
-    // Create location objects for tracking
+    // Create location objects for tracking all 70 research locations
     _checkedLocations.clear();
     
-    APResearchLocation laserLoc(APWorldConfig::LOCATION_LASER_WEAPONS, "Laser Weapons Location", APWorldConfig::RESEARCH_LASER_WEAPONS);
-    APResearchLocation medikitLoc(APWorldConfig::LOCATION_MEDI_KIT, "Medi Kit Location", APWorldConfig::RESEARCH_MEDI_KIT);
-    APResearchLocation scannerLoc(APWorldConfig::LOCATION_MOTION_SCANNER, "Motion Scanner Location", APWorldConfig::RESEARCH_MOTION_SCANNER);
+    // Initialize all locations from the research to location map
+    for (const auto& pair : _researchToLocationMap)
+    {
+        const std::string& researchName = pair.first;
+        int64_t locationId = pair.second;
+        
+        APResearchLocation location(locationId, researchName + " Location", researchName);
+        _checkedLocations.push_back(location);
+    }
     
-    _checkedLocations.push_back(laserLoc);
-    _checkedLocations.push_back(medikitLoc);
-    _checkedLocations.push_back(scannerLoc);
+    std::cout << "[AP] Initialized " << _checkedLocations.size() << " location mappings" << std::endl;
 }
 
 /**

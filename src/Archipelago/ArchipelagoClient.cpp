@@ -25,11 +25,6 @@
 namespace OpenXcom
 {
 
-// Static constants for APWorldConfig
-const char* APWorldConfig::RESEARCH_LASER_WEAPONS = "STR_LASER_WEAPONS";
-const char* APWorldConfig::RESEARCH_MEDI_KIT = "STR_MEDI_KIT";
-const char* APWorldConfig::RESEARCH_MOTION_SCANNER = "STR_MOTION_SCANNER";
-
 /**
  * Creates the Archipelago client
  */
@@ -335,43 +330,6 @@ void ArchipelagoClient::setLocationCheckedCallback(std::function<void(int64_t)> 
 void ArchipelagoClient::setLocationInfoCallback(std::function<void(std::vector<AP_NetworkItem>)> callback)
 {
     _locationInfoCallback = callback;
-}
-
-/**
- * Send location scouts to get item information
- * @param locationIds Set of location IDs to scout
- * @param createAsHint Whether to create as hint (default 0)
- */
-void ArchipelagoClient::sendLocationScouts(const std::set<int64_t>& locationIds, int createAsHint)
-{
-    std::cout << "[AP] sendLocationScouts called with " << locationIds.size() << " locations" << std::endl;
-    std::cout << "[AP] Initialized: " << (_initialized ? "true" : "false") << std::endl;
-    std::cout << "[AP] Connection status: " << static_cast<int>(_connectionStatus) << std::endl;
-    
-    if (_initialized && _connectionStatus == APConnectionStatus::Authenticated)
-    {
-        std::cout << "[AP] Calling AP_SendLocationScouts..." << std::endl;
-        for (const auto& id : locationIds)
-        {
-            std::cout << "[AP]   Location ID: " << id << std::endl;
-        }
-        std::cout << "[AP]   CreateAsHint: " << createAsHint << std::endl;
-        
-        try {
-            AP_SendLocationScouts(locationIds, createAsHint);
-            std::cout << "[AP] AP_SendLocationScouts completed successfully" << std::endl;
-        }
-        catch (const std::exception& e) {
-            std::cout << "[AP] Exception in AP_SendLocationScouts: " << e.what() << std::endl;
-        }
-        catch (...) {
-            std::cout << "[AP] Unknown exception in AP_SendLocationScouts" << std::endl;
-        }
-    }
-    else
-    {
-        std::cout << "[AP] Cannot send location scouts - not authenticated" << std::endl;
-    }
 }
 
 /**
