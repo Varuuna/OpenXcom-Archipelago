@@ -115,9 +115,6 @@ bool ArchipelagoManager::connect(const APConnectionInfo &connectionInfo)
 
 		// Initialize location mappings for this connection
 		initializeLocationMappings();
-
-		// Don't scout locations immediately - wait for authentication
-		// Location scouting will be triggered in update() when authenticated
 	}
 
 	return result;
@@ -397,23 +394,6 @@ void ArchipelagoManager::onItemReceived(int64_t itemId, bool notify)
 {
 	std::cout << "[AP] Item received - ID: " << itemId << std::endl;
 
-	// Show notification for ANY received item (research or not)
-	// Try to get item name from the message queue
-	std::string itemName;
-	if (_client && _client->isMessagePending())
-	{
-		AP_Message *msg = _client->getLatestMessage();
-
-		if (msg && msg->type == AP_MessageType::Plaintext)
-		{
-			std::string notificationText = msg->text;
-			//_geoscapeState->addAPNotification(notificationText, 138); // Blue color for received items
-			std::cout << "[AP] Notification: " << notificationText << std::endl;
-		}
-
-		_client->clearLatestMessage();
-	}
-
 	const APItemInfo *apItem = getItemById(itemId);
 	if (apItem)
 	{
@@ -427,11 +407,12 @@ void ArchipelagoManager::onItemReceived(int64_t itemId, bool notify)
 		if (apItem->type == APItemType::Research)
 		{
 			// Unlock research immediately
-			unlockResearch(item.itemName);
+			auto research = _game->getMod()->getResearch(item.itemName);
+			_game->getSavedGame()->addFinishedResearchSimple(research);
 		}
 	}
-	// Always trigger autosave when receiving any item
-	triggerAutosave();
+
+	_client->clearLatestMessage();
 }
 
 /**
@@ -625,7 +606,6 @@ void ArchipelagoManager::createDynamicResearchProjects()
 
 	std::cout << "[AP] Research projects will use original OpenXcom names" << std::endl;
 }
-
 
 /**
  * Callback for when location info is received
