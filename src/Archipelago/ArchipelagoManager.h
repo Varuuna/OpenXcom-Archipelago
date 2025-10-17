@@ -142,8 +142,8 @@ private:
     /// Private destructor
     ~ArchipelagoManager();
     
-    /// Initialize research mappings
-    void initializeResearchMappings();
+    /// Initialize item mappings
+    void initializeItemMappings();
     
     /// Initialize location mappings for current connection
     void initializeLocationMappings();

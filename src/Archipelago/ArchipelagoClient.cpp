@@ -400,16 +400,6 @@ void ArchipelagoClient::update()
 }
 
 /**
- * Process pending server messages for notifications
- */
-void ArchipelagoClient::processMessages()
-{
-    // This method is intentionally simple - it just exposes the APCpp message system
-    // The actual message processing logic is handled by the ArchipelagoManager
-    // which calls isMessagePending(), getLatestMessage(), and clearLatestMessage()
-}
-
-/**
  * Get error message for connection errors
  * @param error Error code
  * @return error message string

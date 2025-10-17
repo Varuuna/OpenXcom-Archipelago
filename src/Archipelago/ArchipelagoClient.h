@@ -110,9 +110,6 @@ public:
     /// Update the client (should be called regularly)
     void update();
     
-    /// Process pending server messages for notifications
-    void processMessages();
-    
     /// Get error message for connection errors
     static std::string getErrorMessage(APConnectionError error);
     
