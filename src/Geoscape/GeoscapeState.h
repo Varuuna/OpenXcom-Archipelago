@@ -56,6 +56,21 @@ private:
 	std::list<State*> _popups;
 	std::list<DogfightState*> _dogfights, _dogfightsToBeStarted;
 	size_t _minimizedDogfights;
+	
+	// Archipelago notification system
+	static const int AP_MAX_NOTIFICATIONS = 5;
+	Text *_txtAPNotifications[AP_MAX_NOTIFICATIONS];
+	struct APNotificationMessage {
+		std::string text;
+		int remainingTime;  // in milliseconds
+		Uint8 color;
+		bool active;
+		
+		APNotificationMessage() : remainingTime(0), color(0), active(false) {}
+		APNotificationMessage(const std::string& msg, int time, Uint8 col)
+			: text(msg), remainingTime(time), color(col), active(true) {}
+	};
+	std::vector<APNotificationMessage> _apNotifications;
 public:
 	/// Creates the Geoscape state.
 	GeoscapeState();
@@ -149,6 +164,10 @@ public:
 	void handleBaseDefense(Base *base, Ufo *ufo);
 	/// Update the resolution settings, we just resized the window.
 	void resize(int &dX, int &dY);
+	/// Add an Archipelago notification message
+	void addAPNotification(const std::string& message, Uint8 color);
+	/// Update Archipelago notification timers and display
+	void updateAPNotifications();
 private:
 	/// Handle alien mission generation.
 	void determineAlienMissions();

@@ -31,6 +31,7 @@
 #include "../Savegame/ResearchProject.h"
 #include "../Mod/RuleResearch.h"
 #include "ResearchInfoState.h"
+#include "../Archipelago/ArchipelagoManager.h"
 
 namespace OpenXcom
 {
@@ -160,8 +161,7 @@ void ResearchState::fillProjectList()
 		sstr << (*iter)->getAssigned();
 		const RuleResearch *r = (*iter)->getRules();
 
-		std::string wstr = tr(r->getName());
-		_lstResearch->addRow(3, wstr.c_str(), sstr.str().c_str(), tr((*iter)->getResearchProgress()).c_str());
+		_lstResearch->addRow(3, tr(r->getName()).c_str(), sstr.str().c_str(), tr((*iter)->getResearchProgress()).c_str());
 	}
 	_txtAvailable->setText(tr("STR_SCIENTISTS_AVAILABLE").arg(_base->getAvailableScientists()));
 	_txtAllocated->setText(tr("STR_SCIENTISTS_ALLOCATED").arg(_base->getAllocatedScientists()));

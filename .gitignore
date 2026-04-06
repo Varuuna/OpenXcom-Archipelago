@@ -68,6 +68,7 @@ bin/TFTD
 deps/
 docs/html/
 build/
+Publish/
 Dependencies/
 translations/
 *.*.user

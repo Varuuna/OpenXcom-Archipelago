@@ -201,6 +201,7 @@ set ( interface_src
 
 set ( menu_src
   Menu/AbandonGameState.cpp
+  Menu/ArchipelagoConnectState.cpp
   Menu/ConfirmLoadState.cpp
   Menu/CutsceneState.cpp
   Menu/DeleteGameState.cpp
@@ -343,6 +344,12 @@ set ( ufopedia_src
   Ufopaedia/UfopaediaStartState.cpp
 )
 
+set ( archipelago_src
+  Archipelago/ArchipelagoClient.cpp
+  Archipelago/ArchipelagoManager.cpp
+  Archipelago/ItemMappings.cpp
+)
+
 # NOTE: to build with clang *and* libc++ on Linux, you need to call cmake like so:
 # cmake -D CMAKE_C_COMPILER=clang -D CMAKE_CXX_COMPILER=clang++ \
 #     -D CMAKE_CXX_FLAGS=-stdlib=libc++ -D CMAKE_EXE_LINKER_FLAGS=-stdlib=libc++
@@ -427,7 +434,7 @@ if ( WIN32 )
   set ( openxcom_icon OpenXcom.rc )
 endif ()
 
-set ( openxcom_src ${root_src} ${basescape_src} ${battlescape_src} ${engine_src} ${geoscape_src} ${interface_src} ${menu_src} ${mod_src} ${savegame_src} ${ufopedia_src} )
+set ( openxcom_src ${root_src} ${basescape_src} ${battlescape_src} ${engine_src} ${geoscape_src} ${interface_src} ${menu_src} ${mod_src} ${savegame_src} ${ufopedia_src} ${archipelago_src} )
 
 set ( install_dest RUNTIME )
 set ( set_exec_path ON )
@@ -493,7 +500,17 @@ if (${CMAKE_SYSTEM_NAME} MATCHES FreeBSD OR ${CMAKE_SYSTEM_NAME} MATCHES NetBSD 
   set ( system_libs -lexecinfo )
 endif ()
 
+# Add APCpp include directory
+include_directories ( APCpp )
+
 target_link_libraries ( openxcom ${system_libs} ${SDLIMAGE_LIBRARY} ${SDLMIXER_LIBRARY} ${SDLGFX_LIBRARY} ${SDL_LIBRARY} ${OPENGL_LIBRARIES} debug ${YAMLCPP_LIBRARY_DEBUG} optimized ${YAMLCPP_LIBRARY} )
+
+# Link APCpp library
+if ( WIN32 )
+  target_link_libraries ( openxcom ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.lib )
+else ()
+  target_link_libraries ( openxcom ${CMAKE_SOURCE_DIR}/src/APCpp/libAPCpp.so )
+endif ()
 
 # Pack libraries into bundle and link executable appropriately
 if ( APPLE AND CREATE_BUNDLE )
@@ -533,6 +550,46 @@ if ( WIN32 )
   endforeach()
 endif ()
 
+# Copy APCpp DLL to bin folder on Windows
+if ( WIN32 )
+  add_custom_command ( TARGET openxcom
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.dll ${EXECUTABLE_OUTPUT_PATH}
+    VERBATIM )
+  install ( FILES ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.dll DESTINATION bin)
+endif ()
+
+# Copy built executable and dependencies to root Publish directory
+add_custom_command(TARGET openxcom POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/Publish"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:openxcom>" "${CMAKE_SOURCE_DIR}/Publish/"
+    COMMENT "Publishing OpenXcom build to ${CMAKE_SOURCE_DIR}/Publish/"
+)
+
+# Copy data directories to Publish folder
+foreach ( binpath ${bin_data_dirs} )
+    add_custom_command ( TARGET openxcom
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/bin/${binpath} ${CMAKE_SOURCE_DIR}/Publish/${binpath}
+      VERBATIM )
+endforeach()
+
+# Copy Windows DLLs to Publish folder
+if ( WIN32 )
+  foreach ( dll ${Windows_dll} )
+    add_custom_command ( TARGET openxcom
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${dll} ${CMAKE_SOURCE_DIR}/Publish/
+      VERBATIM )
+  endforeach()
+  
+  # Copy APCpp DLL to Publish folder
+  add_custom_command ( TARGET openxcom
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/APCpp/APCpp.dll ${CMAKE_SOURCE_DIR}/Publish/
+    VERBATIM )
+endif ()
+
 #Setup source groups for IDE
 if ( MSVC OR "${CMAKE_GENERATOR}" STREQUAL "Xcode" )
   source_group ( "Basescape" FILES ${basescape_src} )
@@ -544,6 +601,7 @@ if ( MSVC OR "${CMAKE_GENERATOR}" STREQUAL "Xcode" )
   source_group ( "Mod" FILES ${mod_src} )
   source_group ( "Savegame" FILES ${savegame_src} )
   source_group ( "Ufopedia" FILES ${ufopedia_src} )
+  source_group ( "Archipelago" FILES ${archipelago_src} )
   if ( APPLE )
     source_group ( "SDL" FILES ${sdl_src} )
   endif ()

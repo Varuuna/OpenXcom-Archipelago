@@ -54,6 +54,7 @@
 #include "../Mod/RuleRegion.h"
 #include "MissionStatistics.h"
 #include "SoldierDeath.h"
+#include "../Archipelago/ArchipelagoManager.h"
 
 namespace OpenXcom
 {
@@ -1257,6 +1258,13 @@ void SavedGame::getAvailableResearchProjects(std::vector<RuleResearch *> & proje
 	for (std::vector<std::string>::const_iterator iter = mod->getResearchList().begin(); iter != mod->getResearchList().end(); ++iter)
 	{
 		RuleResearch *research = mod->getResearch(*iter);
+
+		// Check if this research is completed but not unlocked by Archipelago
+		// If so, exclude it from available research to prevent re-research
+		if (ArchipelagoManager::getInstance()->isResearchCompletedButNotUnlocked(research->getName()))
+		{
+			continue;
+		}
 
 		if ((considerDebugMode && _debug) || std::find(unlocked.begin(), unlocked.end(), research) != unlocked.end())
 		{
